@@ -1,0 +1,4 @@
+I'll use Google Cloud Run for Background Workers & API because it gives 300 usd in free trial credits.
+                                                               and has Always-Free Tier that includes 2 million free requests and 360,000 GB-seconds of compute every month
+I'll use Google AI Studio / Vertex AI for LLM Hint Generation
+I'll use Supabase for PostgreSQL & and Public API
