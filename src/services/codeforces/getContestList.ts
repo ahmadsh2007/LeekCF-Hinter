@@ -1,11 +1,14 @@
-export async function fetchContestList() {
+import { fetchCodeforcesApi } from './fetchCodeforcesApi.ts'
+
+export async function getContestList() {
   try{
-    const response = await fetch(`https://codeforces.com/api/contest.list?gym=false`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    const url = 'https://codeforces.com/api/contest.list?gym=false'
+    const data = await fetchCodeforcesApi(url);
+
+    if (!data) {
+      throw new Error('No data received from API fetcher')
     }
 
-    const data = await response.json();
     if (data.status === "OK") {
       console.log("Success! Contests fetched successfully");
       console.log(`Total contests found: ${data.result.length}`);
@@ -23,5 +26,3 @@ export async function fetchContestList() {
     return [];
   }
 }
-
-fetchContestList()
