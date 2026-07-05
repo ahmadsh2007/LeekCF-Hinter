@@ -15,9 +15,11 @@ interface CodeforcesProblem {
   rating?: number;
   type: 'PROGRAMMING' | 'QUESTION';
   tags: string[];
-  stage_status: 'DISCOVERED' | 'SCRAPED_WAITING_FOR_CONTEST' | 'WAITING_FOR_TUTORIAL' | 'TUTORIAL_FOUND' | 'HINTS_GENERATED' | 'FAILED'
-  created_at: number,
-  updated_at: number
+  stage_status: 'DISCOVERED' | 'SCRAPED_WAITING_FOR_CONTEST' |
+                'WAITING_FOR_TUTORIAL' | 'TUTORIAL_FOUND' |
+                'HINTS_GENERATED' | 'FAILED';
+  created_at: number;
+  updated_at: number;
 }
 
 const now = new Date().toISOString();
