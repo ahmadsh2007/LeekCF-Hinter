@@ -2,6 +2,7 @@ import { supabaseAdmin } from './supabase.ts'
 import { getProblemList } from '../../services/codeforces/getProblemList.ts'
 import { text } from 'node:stream/consumers';
 import { fetchCodeforcesApi } from '../../services/codeforces/fetchCodeforcesApi.ts';
+import './insertContest.ts'
 
 const problemList = await getProblemList();
 
