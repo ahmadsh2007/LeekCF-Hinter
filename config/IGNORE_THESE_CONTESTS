@@ -1,3 +1,5 @@
+# Write '#' in the begining of the line you want to ignore
+# Right now, we are ignoring ICPC contests, April Fools, and Microsoft Q# Contests
 171
 290
 409
