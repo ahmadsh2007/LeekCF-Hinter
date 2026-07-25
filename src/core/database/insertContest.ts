@@ -2,13 +2,14 @@ import { supabaseAdmin } from './supabase.ts'
 import { getContestList } from '../../services/codeforces/getContestList.ts'
 import { text } from 'node:stream/consumers';
 import { fetchCodeforcesApi } from '../../services/codeforces/fetchCodeforcesApi.ts';
+import { readContestsID } from '../../utils/read_IGNORE_THESE_CONTESTS_file.ts'
 
 // Set to true if you want to include 'BEFORE' or 'CODING' contests, false to skip them
 const includeBefore = false;
 const includeCoding = false;
 
 const contestList = await getContestList();
-
+const ignoredIds = new Set(await readContestsID());
 interface CodeforcesContest {
   id: number;
   name: string;
@@ -20,6 +21,10 @@ interface CodeforcesContest {
 
 const dataToInsert = contestList
   .filter((contest: CodeforcesContest) => {
+    if (ignoredIds.has(contest.id)) {
+      console.log(`Skipping ignored contest ID: ${contest.id} (${contest.name})`);
+      return false;
+    }
     if (contest.phase === 'BEFORE' && !includeBefore) {
       return false;
     }
