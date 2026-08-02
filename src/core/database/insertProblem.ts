@@ -2,6 +2,7 @@ import { supabaseAdmin } from './supabase.ts'
 import { getProblemList } from '../../services/codeforces/getProblemList.ts'
 import { text } from 'node:stream/consumers';
 import { fetchCodeforcesApi } from '../../services/codeforces/fetchCodeforcesApi.ts';
+import { ignoredIds } from './insertContest.ts'
 import './insertContest.ts'
 
 const problemList = await getProblemList();
@@ -27,6 +28,10 @@ const now = new Date().toISOString();
 
 const dataToInsert = problemList
   .filter((problem: CodeforcesProblem) => {
+    if (ignoredIds.has(problem.contestId)) {
+      console.log(`Skipping ignored problem from Contest ID: ${problem.contestId}`);
+      return false;
+    }
     if (problem.type === 'QUESTION' && !includeQuestions) {
       return false;
     }

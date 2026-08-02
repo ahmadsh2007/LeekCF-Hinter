@@ -9,7 +9,7 @@ const includeBefore = false;
 const includeCoding = false;
 
 const contestList = await getContestList();
-const ignoredIds = new Set(await readContestsID());
+export const ignoredIds = new Set(await readContestsID());
 interface CodeforcesContest {
   id: number;
   name: string;
