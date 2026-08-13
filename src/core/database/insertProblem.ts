@@ -8,6 +8,7 @@ import './insertContest.ts'
 const problemList = await getProblemList();
 
 const includeQuestions = false;
+const updateExistingMetadata = true;
 
 interface CodeforcesProblem {
   id: string;
@@ -26,6 +27,12 @@ interface CodeforcesProblem {
 
 const now = new Date().toISOString();
 
+const existingStatuses = new Map<string, string>();
+if (updateExistingMetadata) {
+  const { data } = await supabaseAdmin.from('problems').select('id, stage_status');
+  data?.forEach(p => existingStatuses.set(p.id, p.stage_status));
+}
+
 const dataToInsert = problemList
   .filter((problem: CodeforcesProblem) => {
     if (ignoredIds.has(problem.contestId)) {
@@ -37,22 +44,28 @@ const dataToInsert = problemList
     }
     return true; 
   })
-  .map((problem: CodeforcesProblem) => ({
-    id: `${problem.contestId}_${problem.index}`,
-    contest_id: problem.contestId,
-    index: problem.index,
-    name: problem.name,
-    rating: (problem.rating ?? -1),
-    tags: problem.tags,
-    stage_status: 'DISCOVERED',
-    created_at: now,
-    updated_at: now
-  }));
+  .map((problem: CodeforcesProblem) => {
+    const id = `${problem.contestId}_${problem.index}`;
+    return {
+      id,
+      contest_id: problem.contestId,
+      index: problem.index,
+      name: problem.name,
+      rating: (problem.rating ?? -1),
+      tags: problem.tags,
+      stage_status: existingStatuses.get(id) ?? 'DISCOVERED',
+      created_at: now,
+      updated_at: now
+    };
+  });
 
 if (dataToInsert.length > 0) {
   const { error } = await supabaseAdmin
     .from('problems')
-    .upsert(dataToInsert, { onConflict: 'id' });
+    .upsert(dataToInsert, {
+      onConflict: 'id',
+      ignoreDuplicates: true
+    });
 
   if (error) {
     console.error('Error upserting problems:', error);
