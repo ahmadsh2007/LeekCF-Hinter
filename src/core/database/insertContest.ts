@@ -22,7 +22,7 @@ interface CodeforcesContest {
 const dataToInsert = contestList
   .filter((contest: CodeforcesContest) => {
     if (ignoredIds.has(contest.id)) {
-      console.log(`Skipping ignored contest ID: ${contest.id} (${contest.name})`);
+      // console.log(`Skipping ignored contest ID: ${contest.id} (${contest.name})`);
       return false;
     }
     if (contest.phase === 'BEFORE' && !includeBefore) {

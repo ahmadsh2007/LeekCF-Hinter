@@ -36,7 +36,7 @@ if (updateExistingMetadata) {
 const dataToInsert = problemList
   .filter((problem: CodeforcesProblem) => {
     if (ignoredIds.has(problem.contestId)) {
-      console.log(`Skipping ignored problem from Contest ID: ${problem.contestId}`);
+      // console.log(`Skipping ignored problem from Contest ID: ${problem.contestId}`);
       return false;
     }
     if (problem.type === 'QUESTION' && !includeQuestions) {
