@@ -1,31 +1,14 @@
 import argparse
 import csv
 from src.utils.statementHash import computeStatementHash
+from src.utils.supabasePaging import fetchAllRows
 from src.workers.dedup.dedupPlanner import DedupPlan, DedupProblem, planDedup
 
-PAGE_SIZE = 1000        # Supabase returns at most 1000 rows per request
 FETCH_CHUNK_SIZE = 100  # problem ids travel in the URL of an in_(...) filter
 SAVE_BATCH_SIZE = 200   # specs rows carry whole statements, so keep write requests small
 LINK_CHUNK_SIZE = 100
 SAMPLE_LINKS_TO_PRINT = 20
 REPORT_COLUMNS = ["group", "problem_id", "name", "contest_id", "start_time", "statement_hash"]
-
-def fetchAllRows(client, table: str, columns: str, orderColumn: str) -> list[dict]:
-    rows: list[dict] = []
-    page = 0
-    while True:
-        start = page * PAGE_SIZE
-        batch = (
-            client.table(table)
-            .select(columns)
-            .order(orderColumn)
-            .range(start, start + PAGE_SIZE - 1)
-            .execute()
-        ).data
-        rows.extend(batch)
-        if len(batch) < PAGE_SIZE:
-            return rows
-        page += 1
 
 def buildDedupProblems(problemRows: list[dict], contestRows: list[dict], hashByProblemId: dict[str, str]) -> list[DedupProblem]:
     startTimeByContestId = {contest["id"]: contest["start_time"] for contest in contestRows}
