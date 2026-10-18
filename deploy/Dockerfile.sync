@@ -1,0 +1,13 @@
+# Syncs contests and problems from the Codeforces API:  docker build -f deploy/Dockerfile.sync -t hints-sync .
+FROM node:24-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY src/core ./src/core
+COPY src/services/codeforces ./src/services/codeforces
+COPY src/utils ./src/utils
+COPY config/IGNORE_THESE_CONTESTS ./config/IGNORE_THESE_CONTESTS
+USER node
+# Needs SUPABASE_DATABASE_URL and SUPABASE_DATABASE_SECRET_KEY.
+CMD ["node", "src/core/database/insertProblem.ts"]

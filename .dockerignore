@@ -1,0 +1,16 @@
+# Secrets must never be baked into an image: they come from Secret Manager at run time.
+**/.env
+**/.env.*
+config/.env
+.git
+.idea
+.vscode
+.DS_Store
+node_modules
+venv
+__pycache__
+*.pyc
+tests
+docs
+migrations
+*.docx

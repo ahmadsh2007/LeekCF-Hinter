@@ -1,0 +1,11 @@
+# The public hints API. Build from the repository root:  docker build -f deploy/Dockerfile.api -t hints-api .
+FROM node:24-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY src/api ./src/api
+USER node
+EXPOSE 8080
+# Needs SUPABASE_DATABASE_URL and SUPABASE_PUBLISHABLE_KEY (the publishable key, never the secret key).
+CMD ["node", "src/api/server.ts"]

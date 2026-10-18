@@ -132,3 +132,27 @@ and what to check after the first run.
 Browser extension; Vertex AI client (the interface allows it); translating hints; user accounts or API keys for
 the public API (add if abuse appears); a backfill of the 11k historic problems (an operator decision: run the
 stages in order and watch cost).
+
+## Verification status (what was and was not proven)
+
+**Proven here**
+- 262 Python and 41 Node tests, all offline. The safety rules were mutation-tested: sabotaging each one (the 2-hour
+  rule, the contest re-check in the generator, the status guards, write order, the circuit breakers, the key-safety
+  check, the right-most client address, the rate limit, the view's two contest gates) makes a test fail.
+- Migrations 003 and 004 on a real Postgres 16 with Supabase-like roles, default grants and RLS: as `anon`, the view
+  returns only the gated rows, the base tables return nothing, and writes through the view fail. All five migrations
+  also apply as a single script on an empty database.
+- The statement extractor, the tutorial parser and the tutorial finder against live Codeforces pages: 4 problem pages,
+  6 contest pages, 5 editorials (static and dynamic formats), and the Div. 1 / Div. 2 duplicate pair, using a fake
+  database so nothing was written anywhere.
+- The API server boots, refuses a secret key, and answers health, 400 and 405; the sync script runs from exactly the
+  files its Dockerfile copies.
+
+**Not proven**
+- Anything against a real Supabase project: the migrations in the dashboard's SQL editor, real PostgREST answers,
+  and the `anon` key's behaviour through Supabase's gateway. `docs/staging-runbook.md` has the checks.
+- Gemini: the request and response shapes follow the documented REST API but were never sent, so a wrong model id,
+  a schema the model rejects, or poor hint quality only shows up on the first `--dry-run`.
+- The Docker images and every `gcloud` command in `deploy/README.md`.
+- Cloud Run adding the client address as the *right-most* `X-Forwarded-For` entry (the rate limiter relies on it).
+- Statement fidelity beyond the pages checked; spot-check about ten stored statements after the first scrape.

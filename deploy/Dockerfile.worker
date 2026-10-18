@@ -1,0 +1,12 @@
+# The pipeline stages (scrape, dedup, protect, tutorials, hints):  docker build -f deploy/Dockerfile.worker -t hints-worker .
+FROM python:3.14-slim
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY src ./src
+COPY deploy/run-pipeline.sh ./run-pipeline.sh
+RUN useradd --create-home worker && chmod +x run-pipeline.sh
+USER worker
+# Needs SUPABASE_DATABASE_URL, SUPABASE_DATABASE_SECRET_KEY, GEMINI_API_KEY and GEMINI_MODEL.
+CMD ["./run-pipeline.sh"]

@@ -1,0 +1,8 @@
+# Builds one image per run:
+#   gcloud builds submit . --config deploy/cloudbuild.yaml --substitutions _IMAGE=api,_REPO=$REPO
+# where _IMAGE is api, sync or worker (the suffix of the Dockerfile) and _REPO is the Artifact Registry path.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'deploy/Dockerfile.${_IMAGE}', '-t', '${_REPO}/hints-${_IMAGE}', '.']
+images:
+  - '${_REPO}/hints-${_IMAGE}'
