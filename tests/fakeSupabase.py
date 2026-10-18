@@ -14,6 +14,7 @@ class FakeQuery:
         self.containsFilters = []
         self.orderColumn = None
         self.rangeBounds = None
+        self.onConflict = None
 
     def select(self, columns="*"):
         self.columns = columns
@@ -44,9 +45,10 @@ class FakeQuery:
         self.payload = payload
         return self
 
-    def upsert(self, payload):
+    def upsert(self, payload, on_conflict=None):
         self.operation = "upsert"
         self.payload = payload
+        self.onConflict = on_conflict
         return self
 
     def delete(self):
