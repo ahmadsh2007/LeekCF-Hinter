@@ -1,10 +1,11 @@
 import re
 from bs4 import BeautifulSoup
 from src.services.scraper.errors import ScrapingValidationError
+from src.utils.htmlText import extractText
 from src.utils.statementHash import computeStatementHash
 
 def getSectionText(elem, field_name: str) -> str:
-    text = elem.get_text(separator="\n", strip=True)
+    text = extractText(elem)
     if not text:
         raise ScrapingValidationError(f"Extracted text for '{field_name}' is empty.")
     return text
@@ -45,7 +46,7 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
     if len(childDivs) < 2 or childDivs[1].get("class"):
         raise ScrapingValidationError("Problem statement text div not found at expected DOM hierarchy index.")
 
-    statementText = childDivs[1].get_text(separator="\n\n", strip=True)
+    statementText = extractText(childDivs[1])
     if not statementText:
         raise ScrapingValidationError("Extracted problem statement text is empty.")
 
@@ -71,7 +72,7 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
         raise ScrapingValidationError("Neither an Output nor an Interaction section was found in the problem statement.")
 
     noteElement = soup.select_one(".problem-statement .note")
-    notes = noteElement.get_text(separator="\n", strip=True) if noteElement else None
+    notes = extractText(noteElement) if noteElement else None
 
     # --- 3. STRICTLY PARSE SAMPLE TESTS ---
     sampleContainer = soup.select_one(".problem-statement .sample-tests .sample-test")

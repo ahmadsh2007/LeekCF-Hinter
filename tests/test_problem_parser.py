@@ -19,14 +19,14 @@ class StandardProblemTests(unittest.TestCase):
         self.assertEqual(self.specs["statement_text"], "You are given $$$n$$$ integers.\n\nSecond paragraph.")
 
     def test_input_and_output_sections_are_captured(self):
-        self.assertEqual(self.specs["input_specification"], "Input\nThe first line contains $$$n$$$.")
-        self.assertEqual(self.specs["output_specification"], "Output\nPrint the answer.")
+        self.assertEqual(self.specs["input_specification"], "Input\n\nThe first line contains $$$n$$$.")
+        self.assertEqual(self.specs["output_specification"], "Output\n\nPrint the answer.")
 
     def test_a_standard_problem_has_no_interaction_section(self):
         self.assertIsNone(self.specs["interaction_specification"])
 
     def test_notes_are_captured(self):
-        self.assertEqual(self.specs["notes"], "Note\nIn the first sample, ...")
+        self.assertEqual(self.specs["notes"], "Note\n\nIn the first sample, ...")
 
     def test_samples_are_numbered_from_one(self):
         self.assertEqual(self.samples, [{"test_order": 1, "input_text": "1\n2", "output_text": "3"}])
@@ -38,6 +38,17 @@ class StandardProblemTests(unittest.TestCase):
     def test_fractional_time_limit(self):
         specs, _ = parse_problem_details_strictly(buildPage(timeLimit="1.5 seconds"))
         self.assertEqual(specs["time_limit_ms"], 1500)
+
+    def test_inline_markup_does_not_split_statement_input_or_notes(self):
+        page = buildPage(
+            statementDiv='<div><p>The size is <span class="tex-span"><i>n</i> × <i>m</i></span> meters, print <span class="tex-font-style-tt">YES</span>.</p></div>',
+            inputSection='<div class="input-specification"><div class="section-title">Input</div><p>Line with <span class="tex-span"><i>a</i><sub class="lower-index">i</sub></span> and <b>bold</b>.</p></div>',
+            note='<div class="note"><div class="section-title">Note</div><p>Take <i>x</i> = <span class="tex-span">10<sup class="upper-index">9</sup></span>.</p></div>',
+        )
+        specs, _ = parse_problem_details_strictly(page)
+        self.assertEqual(specs["statement_text"], "The size is $$$n × m$$$ meters, print YES.")
+        self.assertEqual(specs["input_specification"], "Input\n\nLine with $$$a_i$$$ and bold.")
+        self.assertEqual(specs["notes"], "Note\n\nTake x = $$$10^9$$$.")
 
     def test_missing_note_is_none(self):
         specs, _ = parse_problem_details_strictly(buildPage(note=""))
@@ -70,13 +81,13 @@ class InteractiveProblemTests(unittest.TestCase):
     def test_interaction_without_output_is_detected_as_interactive(self):
         page = buildPage(outputSection="", interactionSection=self.INTERACTION)
         specs, _ = parse_problem_details_strictly(page)
-        self.assertEqual(specs["interaction_specification"], 'Interaction\nPrint "? x" to query.')
+        self.assertEqual(specs["interaction_specification"], 'Interaction\n\nPrint "? x" to query.')
         self.assertIsNone(specs["output_specification"])
 
     def test_page_with_both_output_and_interaction_keeps_both(self):
         page = buildPage(interactionSection=self.INTERACTION)
         specs, _ = parse_problem_details_strictly(page)
-        self.assertEqual(specs["output_specification"], "Output\nPrint the answer.")
+        self.assertEqual(specs["output_specification"], "Output\n\nPrint the answer.")
         self.assertIn("Print", specs["interaction_specification"])
 
     def test_an_interaction_title_outside_the_problem_statement_is_ignored(self):
