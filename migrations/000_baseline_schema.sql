@@ -1,9 +1,7 @@
 -- Baseline: the public schema as exported from Supabase on 2026-10-18, BEFORE any file in this folder.
--- Kept as a record of the starting point. Do not run it.
--- (The export writes `tags ARRAY` without an element type; the real column is text[].)
---
--- WARNING: This schema is for context only and is not meant to be run.
--- Table order and constraints may not be valid for execution.
+-- It is the starting point for 001/002. Run it ONLY on an empty database (e.g. a staging project), never on production.
+-- Two fixes against the raw export so it runs: `tags` is text[] (the export wrote `ARRAY`), and the
+-- mixed-case table name "sample_tests_ARCHIEVED" is quoted (the export left it bare, which Postgres lowercases).
 
 CREATE TABLE public.contests (
   id integer NOT NULL,
@@ -21,7 +19,7 @@ CREATE TABLE public.problems (
   index text NOT NULL,
   name text NOT NULL,
   rating smallint,
-  tags ARRAY,
+  tags text[],
   stage_status text NOT NULL,
   created_at timestamp with time zone NOT NULL,
   updated_at timestamp with time zone NOT NULL,
@@ -39,13 +37,13 @@ CREATE TABLE public.problem_specifications (
   CONSTRAINT problem_specifications_pkey PRIMARY KEY (problem_id),
   CONSTRAINT problem_specifications_problem_id_fkey FOREIGN KEY (problem_id) REFERENCES public.problems(id)
 );
-CREATE TABLE public.sample_tests_ARCHIEVED (
+CREATE TABLE public."sample_tests_ARCHIEVED" (
   id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
   problem_id character varying NOT NULL,
   test_order integer NOT NULL,
   input_text text NOT NULL,
   output_text text NOT NULL,
-  CONSTRAINT sample_tests_ARCHIEVED_pkey PRIMARY KEY (id),
+  CONSTRAINT "sample_tests_ARCHIEVED_pkey" PRIMARY KEY (id),
   CONSTRAINT sample_tests_problem_id_fkey FOREIGN KEY (problem_id) REFERENCES public.problems(id)
 );
 CREATE TABLE public.tutorials (

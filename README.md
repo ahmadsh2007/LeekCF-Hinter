@@ -39,7 +39,8 @@ SQL files in `migrations/` are applied by hand (Supabase SQL editor), in order. 
 3. `002_merge_interactive_specs_and_drop_archive.sql` is destructive (drops two tables) and refuses to run unless
    every row was merged. Apply it only after 001.
 
-`000_baseline_schema.sql` is the schema before any migration, for reference only.
+`000_baseline_schema.sql` is the schema before any migration. It runs on an empty database, so use it to build a
+staging project; never run it on production.
 
 ## Running
 
