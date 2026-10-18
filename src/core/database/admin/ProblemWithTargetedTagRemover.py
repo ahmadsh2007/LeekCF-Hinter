@@ -18,13 +18,15 @@ def changeDatabaseValueViaBulkChange():
         print(f"\nStep 1: Finding problems where tags contains '{tagToMatch}'...")
         problems_res = (
             supabase.table("problems")
-            .select("id")
+            .select("id, canonical_problem_id")
             .contains("tags", [tagToMatch])
             .execute()
         )
-        
-        problemIDs = [row["id"] for row in problems_res.data]
-        
+
+        # Duplicates go first: a canonical problem cannot be deleted while a duplicate still points at it.
+        rows = sorted(problems_res.data, key=lambda row: row["canonical_problem_id"] is None)
+        problemIDs = [row["id"] for row in rows]
+
         if not problemIDs:
             print(f"No problems found with tag '{tagToMatch}'. Database untouched.")
             return
@@ -32,31 +34,10 @@ def changeDatabaseValueViaBulkChange():
         totalProblems = len(problemIDs)
         print(f"Found {totalProblems} problem(s) to remove across all tables.")
 
-        # Tables with foreign keys pointing to problems
-        dependent_tables = [
-            "problem_specifications",
-            "interactive_problem_specifications",
-            "sample_tests",
-            "sample_tests_ARCHIEVED",
-            "hints",
-            "tutorials",
-        ]
-
         chunkSize = 100
         idChunk = [problemIDs[i:i + chunkSize] for i in range(0, totalProblems, chunkSize)]
 
-        print("\nStep 2: Deleting dependent data from child tables...")
-        for table in dependent_tables:
-            deletedCount = 0
-            for chunk in idChunk:
-                try:
-                    res = supabase.table(table).delete().in_("problem_id", chunk).execute()
-                    deletedCount += len(res.data)
-                except Exception as e:
-                    pass
-            print(f"  - [{table}]: Removed {deletedCount} record(s)")
-
-        print("\nStep 3: Deleting records from 'problems'...")
+        print("\nStep 2: Deleting records from 'problems' (specs, sample tests, tutorials and hints go with them via ON DELETE CASCADE)...")
         totalDeletedProblems = 0
         for chunk in idChunk:
             res = supabase.table("problems").delete().in_("id", chunk).execute()

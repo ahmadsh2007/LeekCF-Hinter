@@ -1,4 +1,4 @@
-"""An in-memory stand-in for the supabase-py query builder, just rich enough for the dedup worker's tests."""
+"""An in-memory stand-in for the supabase-py query builder, just rich enough for the worker and admin tests."""
 from types import SimpleNamespace
 
 
@@ -11,6 +11,7 @@ class FakeQuery:
         self.columns = "*"
         self.eqFilters = []
         self.inFilters = []
+        self.containsFilters = []
         self.orderColumn = None
         self.rangeBounds = None
 
@@ -24,6 +25,10 @@ class FakeQuery:
 
     def in_(self, column, values):
         self.inFilters.append((column, list(values)))
+        return self
+
+    def contains(self, column, values):
+        self.containsFilters.append((column, list(values)))
         return self
 
     def order(self, column):
@@ -44,16 +49,30 @@ class FakeQuery:
         self.payload = payload
         return self
 
+    def delete(self):
+        self.operation = "delete"
+        return self
+
+    def matches(self, row) -> bool:
+        return (
+            all(row.get(column) == value for column, value in self.eqFilters)
+            and all(row.get(column) in values for column, values in self.inFilters)
+            and all(all(value in (row.get(column) or []) for value in values) for column, values in self.containsFilters)
+        )
+
     def execute(self):
         self.client.calls.append(self)
-        if self.operation != "select":
+        if self.operation in ("update", "upsert"):
             return SimpleNamespace(data=[])
 
-        rows = [dict(row) for row in self.client.tables.get(self.tableName, [])]
-        for column, value in self.eqFilters:
-            rows = [row for row in rows if row.get(column) == value]
-        for column, values in self.inFilters:
-            rows = [row for row in rows if row.get(column) in values]
+        tableRows = self.client.tables.get(self.tableName, [])
+        matched = [dict(row) for row in tableRows if self.matches(row)]
+
+        if self.operation == "delete":
+            self.client.tables[self.tableName] = [row for row in tableRows if not self.matches(row)]
+            return SimpleNamespace(data=matched)
+
+        rows = matched
         if self.orderColumn:
             rows.sort(key=lambda row: row[self.orderColumn])
         if self.rangeBounds:
