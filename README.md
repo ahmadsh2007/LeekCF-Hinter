@@ -28,6 +28,9 @@ hint generator, and the public API / extension.
 - `python -m venv venv && venv/bin/pip install -r requirements.txt`
 - `config/.env` (not committed) needs `SUPABASE_DATABASE_URL` and `SUPABASE_DATABASE_SECRET_KEY`.
 - `config/IGNORE_THESE_CONTESTS` lists contest ids that are never added to the database.
+- To point any script at another project (e.g. a staging Supabase project) without touching `config/.env`, set
+  `ENV_FILE`: `ENV_FILE=~/leekcf-env/staging.env venv/bin/python -u -m src.services.scraper.mainChecker`.
+  Every script prints `Supabase target: <host>` first, so you can see which project it is about to use.
 
 ## Database migrations
 
