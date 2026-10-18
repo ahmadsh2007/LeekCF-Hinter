@@ -24,7 +24,7 @@ design or an operator (you) with a backup in hand.
 
 ## Schema (migrations/)
 
-`000_baseline_schema.sql` is the pre-migration schema, kept for reference only (not runnable).
+`000_baseline_schema.sql` is the pre-migration schema. It runs on an empty database (to build a staging project); never on production.
 
 ### `001_foundation.sql` (additive, one transaction, safe to apply before the code)
 
