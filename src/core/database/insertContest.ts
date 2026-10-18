@@ -19,6 +19,8 @@ interface CodeforcesContest {
   durationSeconds: number;
 }
 
+const syncedAt = new Date().toISOString();
+
 const dataToInsert = contestList
   .filter((contest: CodeforcesContest) => {
     if (ignoredIds.has(contest.id)) {
@@ -40,6 +42,7 @@ const dataToInsert = contestList
     phase: contest.phase,
     start_time: new Date((contest.startTimeSeconds ?? 0) * 1000).toISOString(),
     duration_seconds: contest.durationSeconds,
+    last_check_at: syncedAt,
   }));
 
 if (dataToInsert.length > 0) {

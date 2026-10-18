@@ -27,31 +27,9 @@ export async function deleteProblemsFromIgnoredContests() {
     console.log('No problems found under the specified ignored contest IDs.');
   } else {
     const problemIds = problemsToDelete.map((p) => p.id);
-    console.log(`Found ${problemIds.length} problem(s) to remove. Cleaning up child records...`);
+    console.log(`Found ${problemIds.length} problem(s) to remove.`);
 
-    // Cascade cleanup across related problem tables
-    const { error: samplesError } = await supabaseAdmin
-      .from('sample_tests')
-      .delete()
-      .in('problem_id', problemIds);
-
-    if (samplesError) console.error('Error deleting sample tests:', samplesError.message);
-
-    const { error: specsError } = await supabaseAdmin
-      .from('problem_specifications')
-      .delete()
-      .in('problem_id', problemIds);
-
-    if (specsError) console.error('Error deleting problem specifications:', specsError.message);
-
-    const { error: interactiveSpecsError } = await supabaseAdmin
-      .from('interactive_problem_specifications')
-      .delete()
-      .in('problem_id', problemIds);
-
-    if (interactiveSpecsError) console.error('Error deleting interactive problem specifications:', interactiveSpecsError.message);
-
-    // Delete the parent records from the problems table
+    // Specs, sample tests, tutorials and hints are removed by ON DELETE CASCADE.
     const { error: deleteProblemsError } = await supabaseAdmin
       .from('problems')
       .delete()
