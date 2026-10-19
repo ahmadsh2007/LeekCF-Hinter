@@ -47,6 +47,15 @@ test('the documented example is itself a valid response shape', () => {
   assert.deepEqual(example.hints.map((h: any) => h.level), example.hints.map((_: any, i: number) => i + 1))
 })
 
+test('the example request and the example response describe the same problem, so the first curl a visitor copies matches what they see', () => {
+  const operation = doc.paths['/v1/problems/{contestId}/{index}/hints'].get
+  const example = operation.responses['200'].content['application/json'].example
+  const byName = (name: string) => operation.parameters.find((p: any) => p.name === name).example
+  assert.equal(byName('contestId'), example.problem.contestId)
+  assert.equal(String(byName('index')).toUpperCase(), example.problem.index)
+  assert.equal(example.problem.id, `${example.problem.contestId}_${example.problem.index}`)
+})
+
 test('every error code the router can send is listed in the document', async () => {
   const repository: HintsRepository = { async findHints(contestId) { if (contestId === 503) throw new Error('db'); return contestId === 404 ? [] : sampleRows } }
   const route = createRouter({ repository, limiter: new RateLimiter(3, 0.001), cache: new TtlCache<HintsPayload | null>(1000, 10), log: () => {} })

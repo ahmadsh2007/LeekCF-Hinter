@@ -1,16 +1,17 @@
 // The single description of the public API. It is served at /v1/openapi.json and rendered at /v1/docs, and a test
 // compares it with what the controller really returns, so the documentation cannot drift from the code.
 export function buildOpenApiDocument(publicBaseUrl: string): Record<string, unknown> {
+  // A real answer for a problem that exists in the database (Codeforces 1061A, "Coins"), so that the first request a
+  // visitor copies from the docs works.
   const exampleResponse = {
-    problem: { id: '1944_C', contestId: 1944, index: 'C', name: 'MEX Game 1', rating: 1500, tags: ['games', 'greedy'] },
-    duplicateOf: '1943_A',
+    problem: { id: '1061_A', contestId: 1061, index: 'A', name: 'Coins', rating: 800, tags: ['greedy', 'implementation', 'math'] },
+    duplicateOf: null,
     hints: [
-      { level: 1, content: 'Think about which numbers Alice can always keep, whatever Bob removes.' },
-      { level: 2, content: 'A value that appears at least twice can never be taken away from Alice completely.' },
-      { level: 3, content: 'Only values that appear once matter. Look at the smallest values with count $0$ and $1$.' },
+      { level: 1, content: 'To minimize the total number of coins needed to reach a target sum $S$, each coin should contribute as much as possible to the sum. What is the largest coin value available, and how much of $S$ can be covered using only that largest value?' },
+      { level: 2, content: 'To achieve the minimum number of coins, take as many coins of the maximum value $n$ as possible. The number of full coins of value $n$ you can use is $\\lfloor S / n \\rfloor$. If $S$ is not evenly divisible by $n$, the remainder $S \\bmod n$ is strictly less than $n$, so it can be covered using exactly one additional coin of value $S \\bmod n$. Thus, the minimum number of coins required is $\\lceil S / n \\rceil$, which can be computed in $O(1)$ time using integer arithmetic as $(S + n - 1) / n$.' },
     ],
     groundedInTutorial: true,
-    generatedAt: '2026-10-19T12:00:00+00:00',
+    generatedAt: '2026-10-19T16:22:59.130126+00:00',
   }
 
   const errorResponse = (description: string) => ({
@@ -44,12 +45,12 @@ export function buildOpenApiDocument(publicBaseUrl: string): Record<string, unkn
           parameters: [
             {
               name: 'contestId', in: 'path', required: true, description: 'The Codeforces contest id.',
-              schema: { type: 'integer', minimum: 1, maximum: 9999999 }, example: 1944,
+              schema: { type: 'integer', minimum: 1, maximum: 9999999 }, example: 1061,
             },
             {
               name: 'index', in: 'path', required: true,
               description: 'The problem letter, with a digit for split problems (A, B1, D2). Case-insensitive.',
-              schema: { type: 'string', pattern: '^[A-Za-z][0-9]{0,2}$' }, example: 'C',
+              schema: { type: 'string', pattern: '^[A-Za-z][0-9]{0,2}$' }, example: 'A',
             },
             {
               name: 'X-Client', in: 'header', required: false,

@@ -9,7 +9,7 @@ enabled = true   # Workers Logs: the request log lines (route, status, app name;
 
 [vars]
 # The address people will use, shown in the documentation. Change it after the first deploy.
-PUBLIC_BASE_URL = "https://leekcf-hinter-api.YOUR-SUBDOMAIN.workers.dev"
+PUBLIC_BASE_URL = "https://leekcf-hinter-api.leekcf.workers.dev"
 
 # Set these two with `npx wrangler secret put NAME` (not here, so they never end up in git):
 #   SUPABASE_DATABASE_URL        the project URL
