@@ -45,7 +45,7 @@ SQL files in `migrations/` are applied by hand (Supabase SQL editor), in order. 
    the old scripts write `memory_limit_ms`, which it renames to `memory_limit_mb`.
 3. `002_merge_interactive_specs_and_drop_archive.sql` is destructive (drops two tables) and refuses to run unless
    every row was merged. Apply it only after 001.
-4. `003_pipeline_state.sql` adds `problems.hint_attempts` and one tutorial per problem. Additive.
+4. `003_pipeline_state.sql` adds `problems.hint_attempts`, one tutorial per problem, and lets interactive problems that have no Input section be stored. Additive. Apply it before the scraper.
 5. `004_public_hints_view.sql` creates `public_hints`, the only thing the public API can read: it returns hints only
    when the contest is over by 2 hours. Additive.
 

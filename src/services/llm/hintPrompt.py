@@ -51,7 +51,7 @@ class ProblemForHints:
     timeLimitMs: int
     memoryLimitMb: int
     statementText: str
-    inputSpecification: str
+    inputSpecification: str | None
     outputSpecification: str | None
     interactionSpecification: str | None
     notes: str | None
@@ -71,9 +71,8 @@ def buildUserPrompt(problem: ProblemForHints, feedback: str | None = None) -> st
         f"Tags (for your reference only, do not reveal before level 3): {', '.join(problem.tags) or 'none'}",
         "## Statement",
         problem.statementText,
-        problem.inputSpecification,
     ]
-    for optional in (problem.outputSpecification, problem.interactionSpecification, problem.notes):
+    for optional in (problem.inputSpecification, problem.outputSpecification, problem.interactionSpecification, problem.notes):
         if optional:
             sections.append(optional)
 

@@ -16,7 +16,7 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
     Raises ScrapingValidationError if ANY required field is missing, empty, or unparseable.
     Zero fallbacks allowed.
     A problem is interactive when its statement has an "Interaction" section; a page needs an Output
-    section, an Interaction section, or both.
+    section, an Interaction section, or both. An Input section is required unless the problem is interactive.
     Returns: (specs_dict, samples_list)
     """
     # --- 1. PARSE LIMITS & STATEMENT ---
@@ -51,11 +51,6 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
         raise ScrapingValidationError("Extracted problem statement text is empty.")
 
     # --- 2. PARSE SPECS & NOTES ---
-    inputElement = soup.select_one(".problem-statement .input-specification")
-    if not inputElement:
-        raise ScrapingValidationError("Required element '.problem-statement .input-specification' (input_specification) not found.")
-    inputSpec = getSectionText(inputElement, "input_specification")
-
     outputElement = soup.select_one(".problem-statement .output-specification")
     outputSpec = getSectionText(outputElement, "output_specification") if outputElement else None
 
@@ -67,6 +62,16 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
     )
     if interactionTitle:
         interactionSpec = getSectionText(interactionTitle.parent, "interaction_specification")
+
+    # Some interactive problems (e.g. 1155E) go straight from the statement to the Interaction section and have
+    # no Input section. Every other problem must have one; a present-but-empty one is always a broken page.
+    inputElement = soup.select_one(".problem-statement .input-specification")
+    if inputElement:
+        inputSpec = getSectionText(inputElement, "input_specification")
+    elif interactionSpec is not None:
+        inputSpec = None
+    else:
+        raise ScrapingValidationError("Required element '.problem-statement .input-specification' (input_specification) not found.")
 
     if outputSpec is None and interactionSpec is None:
         raise ScrapingValidationError("Neither an Output nor an Interaction section was found in the problem statement.")

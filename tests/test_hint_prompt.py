@@ -108,6 +108,12 @@ class UserPromptTests(unittest.TestCase):
         self.assertIn("Print a query.", prompt)
         self.assertNotIn("Print the score.", prompt)
 
+    def test_an_interactive_problem_without_an_input_section_has_no_empty_heading_or_none(self):
+        prompt = buildUserPrompt(sampleProblem(inputSpecification=None, outputSpecification=None, interactionSpecification="Interaction\n\nPrint a query."))
+        self.assertIn("Print a query.", prompt)
+        self.assertNotIn("None", prompt)
+        self.assertNotIn("\n\n\n\n", prompt)
+
     def test_missing_notes_are_left_out(self):
         self.assertNotIn("In the first test", buildUserPrompt(sampleProblem(notes=None)))
 

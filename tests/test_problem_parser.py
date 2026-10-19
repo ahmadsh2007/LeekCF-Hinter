@@ -90,6 +90,28 @@ class InteractiveProblemTests(unittest.TestCase):
         self.assertEqual(specs["output_specification"], "Output\n\nPrint the answer.")
         self.assertIn("Print", specs["interaction_specification"])
 
+    def test_an_interactive_problem_may_have_no_input_section_at_all(self):
+        # e.g. Codeforces 1155E: the statement is followed directly by the Interaction section
+        page = buildPage(inputSection="", outputSection="", interactionSection=self.INTERACTION)
+        specs, samples = parse_problem_details_strictly(page)
+        self.assertIsNone(specs["input_specification"])
+        self.assertIsNone(specs["output_specification"])
+        self.assertEqual(specs["interaction_specification"], 'Interaction\n\nPrint "? x" to query.')
+        self.assertEqual(len(samples), 1)
+
+    def test_the_hash_of_such_a_problem_is_stable_and_differs_from_one_with_an_input_section(self):
+        without, _ = parse_problem_details_strictly(buildPage(inputSection="", outputSection="", interactionSection=self.INTERACTION))
+        again, _ = parse_problem_details_strictly(buildPage(inputSection="", outputSection="", interactionSection=self.INTERACTION))
+        withInput, _ = parse_problem_details_strictly(buildPage(outputSection="", interactionSection=self.INTERACTION))
+        self.assertEqual(without["statement_hash"], again["statement_hash"])
+        self.assertNotEqual(without["statement_hash"], withInput["statement_hash"])
+
+    def test_a_present_but_empty_input_section_is_still_a_broken_page_even_when_interactive(self):
+        empty = '<div class="input-specification"> </div>'
+        with self.assertRaises(ScrapingValidationError) as raised:
+            parse_problem_details_strictly(buildPage(inputSection=empty, outputSection="", interactionSection=self.INTERACTION))
+        self.assertIn("input_specification", str(raised.exception))
+
     def test_an_interaction_title_outside_the_problem_statement_is_ignored(self):
         page = buildPage(outputSection="", outside=self.INTERACTION)
         with self.assertRaises(ScrapingValidationError):
@@ -121,6 +143,9 @@ class ValidationFailureTests(unittest.TestCase):
 
     def test_statement_div_that_has_a_class_is_not_the_statement(self):
         self.assertRejected(buildPage(statementDiv='<div class="oops"><p>x</p></div>'), "Problem statement text div")
+
+    def test_a_standard_problem_must_have_an_input_section(self):
+        self.assertRejected(buildPage(inputSection=""), "input_specification")
 
     def test_empty_input_specification(self):
         empty = '<div class="input-specification"> </div>'
