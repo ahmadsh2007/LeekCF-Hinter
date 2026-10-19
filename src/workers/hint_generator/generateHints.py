@@ -2,7 +2,8 @@ import argparse
 import sys
 import time
 from datetime import datetime, timedelta, timezone
-from src.services.llm.geminiClient import LlmBlockedError, LlmRequestError, TransientLlmError, clientFromEnvironment
+from src.services.llm.errors import LlmBlockedError, LlmRequestError, LlmTruncatedError, TransientLlmError
+from src.services.llm.llmProvider import createClientFromEnvironment
 from src.services.llm.hintPrompt import (
     PROMPT_VERSION,
     RESPONSE_SCHEMA,
@@ -162,41 +163,47 @@ def run(client, llm, limit: int = DEFAULT_LIMIT, includeWithoutTutorial: bool = 
             counts["retry_later"] += 1
             print(f"[RETRY LATER] {row['id']} (attempt {update['hint_attempts']}): {message}")
 
-    for position, row in enumerate(candidates):
-        if position > 0 and delaySeconds > 0:
-            sleep(delaySeconds)
+    try:
+        for position, row in enumerate(candidates):
+            if position > 0 and delaySeconds > 0:
+                sleep(delaySeconds)
 
-        try:
-            problem, grounded = loadProblem(client, row)
-            print(f"Generating hints for {row['id']} ({'with' if grounded else 'without'} editorial)...")
-            hints = generateValidHints(llm, problem)
-        except MissingDataError as e:
-            recordFailure(row, str(e))
-            continue
-        except HintValidationError as e:
-            recordFailure(row, f"The model's answer was rejected {1 + MAX_FORMAT_RETRIES} times: {e}")
-            continue
-        except LlmBlockedError as e:
-            recordFailure(row, str(e))
-            continue
-        except TransientLlmError as e:
-            print(f"[RETRY LATER] {row['id']}: {e}")
-            counts["transient_failures"] += 1
-            consecutiveTransientFailures += 1
-            if consecutiveTransientFailures >= MAX_CONSECUTIVE_TRANSIENT_FAILURES:
-                print(f"Stopping: {consecutiveTransientFailures} provider errors in a row. "
-                      "The API is probably rate limiting or down; wait before running again.")
-                break
-            continue
-        # An LlmRequestError (bad key, unknown model) is deliberately not caught: every call would fail.
+            try:
+                problem, grounded = loadProblem(client, row)
+                print(f"Generating hints for {row['id']} ({'with' if grounded else 'without'} editorial)...")
+                hints = generateValidHints(llm, problem)
+            except MissingDataError as e:
+                recordFailure(row, str(e))
+                continue
+            except HintValidationError as e:
+                recordFailure(row, f"The model's answer was rejected {1 + MAX_FORMAT_RETRIES} times: {e}")
+                continue
+            except (LlmBlockedError, LlmTruncatedError) as e:
+                recordFailure(row, str(e))
+                continue
+            except TransientLlmError as e:
+                print(f"[RETRY LATER] {row['id']}: {e}")
+                counts["transient_failures"] += 1
+                consecutiveTransientFailures += 1
+                if consecutiveTransientFailures >= MAX_CONSECUTIVE_TRANSIENT_FAILURES:
+                    print(f"Stopping: {consecutiveTransientFailures} provider errors in a row. "
+                          "The API is probably rate limiting or down; wait before running again.")
+                    break
+                continue
+            # An LlmRequestError (bad key, unknown model) is deliberately not caught: every call would fail.
 
-        consecutiveTransientFailures = 0
-        if dryRun:
-            for hint in hints:
-                print(f"  [{row['id']}] Hint {hint.level}: {hint.content}")
-        else:
-            saveHints(client, row, hints, llm.model, grounded)
-        counts["generated"] += 1
+            consecutiveTransientFailures = 0
+            if dryRun:
+                for hint in hints:
+                    print(f"  [{row['id']}] Hint {hint.level}: {hint.content}")
+            else:
+                saveHints(client, row, hints, llm.model, grounded)
+            counts["generated"] += 1
+    finally:
+        # Printed however the run ends (also on a bad key), so money spent is never invisible.
+        usageSummary = getattr(llm, "usageSummary", None)
+        if callable(usageSummary):
+            print(f"Usage: {usageSummary()}")
 
     print(f"Done. Generated: {counts['generated']}, failed: {counts['failed']}, will retry: {counts['retry_later']}, "
           f"provider errors: {counts['transient_failures']}.")
@@ -218,7 +225,7 @@ def main():
     # Imported here so the module can be imported (e.g. by tests) without database credentials.
     from src.core.database.dbClient import supabase
     try:
-        run(supabase, clientFromEnvironment(), args.limit, args.include_without_tutorial,
+        run(supabase, createClientFromEnvironment(), args.limit, args.include_without_tutorial,
             args.no_tutorial_after_days, args.dry_run, args.problem, args.delay)
     except LlmRequestError as e:
         print(f"Stopping: {e}")

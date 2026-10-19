@@ -1,5 +1,13 @@
 import os
 import requests
+from src.services.llm.errors import (  # re-exported: callers import the errors from here
+    LlmBlockedError,
+    LlmConfigurationError,
+    LlmError,
+    LlmRequestError,
+    LlmTruncatedError,
+    TransientLlmError,
+)
 
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 REQUEST_TIMEOUT_SECONDS = 180
@@ -18,21 +26,6 @@ def toGeminiSchema(schema):
     if isinstance(schema, list):
         return [toGeminiSchema(item) for item in schema]
     return schema
-
-class LlmError(Exception):
-    pass
-
-class TransientLlmError(LlmError):
-    """Rate limit, server trouble or an empty answer: trying again later may work."""
-
-class LlmRequestError(LlmError):
-    """The API rejected the request itself (bad key, unknown model, malformed request). Every call will fail."""
-
-class LlmConfigurationError(LlmRequestError):
-    """GEMINI_API_KEY or GEMINI_MODEL is not set."""
-
-class LlmBlockedError(LlmError):
-    """The model refused this particular problem for content reasons."""
 
 class GeminiClient:
     """Google AI Studio (Gemini API) over plain HTTPS. Returns the model's text; judging it is the validator's job."""

@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -6,6 +8,7 @@ from src.services.llm.geminiClient import (
     LlmBlockedError,
     LlmConfigurationError,
     LlmRequestError,
+    LlmTruncatedError,
     TransientLlmError,
 )
 from src.services.llm.hintPrompt import PROMPT_VERSION, RESPONSE_SCHEMA, SYSTEM_PROMPT
@@ -259,6 +262,13 @@ class RejectedAnswerTests(unittest.TestCase):
         self.assertIn("blocked", updatesOf(client)[0].payload["last_error"])
         self.assertEqual(result["retry_later"], 1)
 
+    def test_an_answer_cut_off_at_the_output_limit_counts_as_a_failed_attempt(self):
+        client = world()
+        result = go(client, FakeLlm(LlmTruncatedError("The answer was cut off at 16000 output tokens.")))
+        self.assertIn("cut off", updatesOf(client)[0].payload["last_error"])
+        self.assertEqual(updatesOf(client)[0].payload["hint_attempts"], 1)
+        self.assertEqual(result["retry_later"], 1)
+
     def test_missing_specifications_are_recorded_not_sent_to_the_model(self):
         client, llm = world(withSpecs=False), FakeLlm()
         go(client, llm)
@@ -306,6 +316,32 @@ class ProviderTroubleTests(unittest.TestCase):
             self.assertEqual(len(llm.calls), 1)
             self.assertEqual(client.writes("hints", "upsert"), [])
             self.assertEqual(updatesOf(client), [])
+
+
+class UsageReportTests(unittest.TestCase):
+    class MeteredLlm(FakeLlm):
+        def usageSummary(self):
+            return "3 request(s), 9,000 input + 4,000 output tokens, about $0.12 at test list prices"
+
+    def output(self, client, llm, **kwargs):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            try:
+                go(client, llm, **kwargs)
+            except LlmRequestError:
+                pass
+        return buffer.getvalue()
+
+    def test_the_run_ends_by_reporting_what_it_cost(self):
+        text = self.output(world(), self.MeteredLlm())
+        self.assertIn("Usage: 3 request(s), 9,000 input + 4,000 output tokens", text)
+
+    def test_the_cost_is_reported_even_when_the_run_stops_on_a_bad_key(self):
+        text = self.output(world(), self.MeteredLlm(LlmRequestError("HTTP 400: credit balance is too low")))
+        self.assertIn("Usage:", text)
+
+    def test_a_client_without_metering_is_fine(self):
+        self.assertNotIn("Usage:", self.output(world(), FakeLlm()))
 
 
 class DryRunTests(unittest.TestCase):
