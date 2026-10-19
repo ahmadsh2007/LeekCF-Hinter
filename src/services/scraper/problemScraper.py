@@ -10,7 +10,7 @@ def scrapeProblemPage(contest_id: int, index: str) -> BeautifulSoup:
     Returns the parsed problem page.
     Raises TransientScrapeError when retrying later may work (network error, block, rate limit, server error,
     or a 200 page with no problem statement such as a challenge page), and ScrapingValidationError when the
-    page does not exist (404).
+    page does not exist (404) or the statement is only published as a PDF.
     """
     url = f"https://codeforces.com/problemset/problem/{contest_id}/{index}"
     print(f"Scraping: {url}")
@@ -24,6 +24,9 @@ def scrapeProblemPage(contest_id: int, index: str) -> BeautifulSoup:
         raise ScrapingValidationError(f"Problem page not found (HTTP 404): {url}")
     if response.status_code != 200:
         raise TransientScrapeError(f"HTTP {response.status_code} while fetching {url}")
+
+    if "application/pdf" in response.headers.get("Content-Type", ""):
+        raise ScrapingValidationError(f"The statement is only published as a PDF, not as a web page: {url}")
 
     soup = BeautifulSoup(response.text, 'html.parser')
     if not soup.select_one(".problem-statement"):

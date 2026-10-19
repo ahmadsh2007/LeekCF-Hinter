@@ -9,8 +9,8 @@ from src.services.scraper.problemScraper import scrapeProblemPage
 PROBLEM_PAGE = '<html><body><div class="problem-statement"><div class="header"></div></div></body></html>'
 
 
-def fakeResponse(statusCode: int, text: str = "") -> Mock:
-    return Mock(status_code=statusCode, text=text)
+def fakeResponse(statusCode: int, text: str = "", contentType: str = "text/html;charset=UTF-8") -> Mock:
+    return Mock(status_code=statusCode, text=text, headers={"Content-Type": contentType})
 
 
 @patch("src.services.scraper.problemScraper.requests.get")
@@ -33,6 +33,13 @@ class ScrapeProblemPageTests(unittest.TestCase):
         with self.assertRaises(TransientScrapeError) as raised:
             scrapeProblemPage(1800, "A")
         self.assertIn("problem statement", str(raised.exception))
+
+    def test_a_statement_published_only_as_a_pdf_is_permanent(self, mockGet):
+        # Some contests (e.g. 2073, an ICPC mirror) answer the problem URL with the statement as a PDF file.
+        mockGet.return_value = fakeResponse(200, "%PDF-1.5 binary", contentType="application/pdf;charset=UTF-8")
+        with self.assertRaises(ScrapingValidationError) as raised:
+            scrapeProblemPage(2073, "K")
+        self.assertIn("PDF", str(raised.exception))
 
     def test_404_is_permanent(self, mockGet):
         mockGet.return_value = fakeResponse(404)
