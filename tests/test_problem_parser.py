@@ -176,10 +176,31 @@ class ValidationFailureTests(unittest.TestCase):
         </div></div>"""
         self.assertRejected(buildPage(samples=samples), "Mismatched samples")
 
-    def test_empty_sample_text(self):
+    def test_a_sample_may_have_an_empty_output(self):
+        # e.g. Codeforces 1179A: a sample with zero queries has an empty correct output
+        samples = """
+        <div class="sample-tests"><div class="sample-test">
+          <div class="input"><pre>
+2 0
+0 0
+</pre></div><div class="output"><pre>
+</pre></div>
+        </div></div>"""
+        _, parsed = parse_problem_details_strictly(buildPage(samples=samples))
+        self.assertEqual(parsed, [{"test_order": 1, "input_text": "2 0\n0 0", "output_text": ""}])
+
+    def test_a_sample_may_have_an_empty_input(self):
         samples = """
         <div class="sample-tests"><div class="sample-test">
           <div class="input"><pre> </pre></div><div class="output"><pre>c</pre></div>
+        </div></div>"""
+        _, parsed = parse_problem_details_strictly(buildPage(samples=samples))
+        self.assertEqual(parsed, [{"test_order": 1, "input_text": "", "output_text": "c"}])
+
+    def test_a_sample_with_nothing_on_either_side_is_a_broken_page(self):
+        samples = """
+        <div class="sample-tests"><div class="sample-test">
+          <div class="input"><pre> </pre></div><div class="output"><pre> </pre></div>
         </div></div>"""
         self.assertRejected(buildPage(samples=samples), "Sample test #1")
 

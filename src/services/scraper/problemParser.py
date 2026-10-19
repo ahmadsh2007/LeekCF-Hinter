@@ -102,8 +102,10 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
             inText = inElem.get_text(separator="\n", strip=True)
             outText = outElem.get_text(separator="\n", strip=True)
 
-            if inText == "" or outText == "":
-                raise ScrapingValidationError(f"Sample test #{idx} contains empty input or output text.")
+            # One empty side is real (a sample with no queries has no output; a problem with no input has no input).
+            # Both empty means the page was not read properly.
+            if inText == "" and outText == "":
+                raise ScrapingValidationError(f"Sample test #{idx} contains neither input nor output text.")
 
             samples.append({
                 "test_order": idx,
