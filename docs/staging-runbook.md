@@ -9,16 +9,17 @@ Keep its keys in a file **outside** the repository, e.g. `~/leekcf-env/staging.e
 SUPABASE_DATABASE_URL=https://YOUR-PROJECT-REF.supabase.co
 SUPABASE_DATABASE_SECRET_KEY=sb_secret_...
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-GEMINI_API_KEY=...
-GEMINI_MODEL=...
+ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+(Claude Opus 5.5 at high effort is the default; add `ANTHROPIC_MODEL=` / `ANTHROPIC_EFFORT=` to change that.)
 
 Every command below starts with `ENV_FILE=~/leekcf-env/staging.env`, which points the script at that project instead of
 `config/.env`. Each script prints `Supabase target: <host>` first so you can see where it is about to write.
 
 ## 1. Build the database (you, about 2 minutes)
 
-1. In Terminal, from the repository folder: `cat migrations/00*.sql | pbcopy` (copies all five migrations).
+1. In Terminal, from the repository folder: `cat migrations/00*.sql | pbcopy` (copies all five migrations). If the project already has 000-002, copy only the new ones: `cat migrations/003*.sql migrations/004*.sql | pbcopy`.
 2. Supabase dashboard -> the Temp project -> **SQL Editor** -> **New query** -> paste -> **Run**.
    Expect "Success. No rows returned". If you get a red error, copy it to me.
 3. Turn on row level security, like production already has (new query -> paste -> Run):
@@ -77,7 +78,7 @@ What to look at after each:
 | dedup | `select id, canonical_problem_id from problems where stage_status = 'DUPLICATE';` | each Div. 2 twin points at its Div. 1 problem; the CSV lists pairs whose text differs |
 | protector | the same status count | old contests moved to `WAITING_FOR_TUTORIAL` |
 | tutorials | `select problem_id, length(raw_content) from tutorials;` | rows for problems whose contest has a tutorial; those problems are `TUTORIAL_FOUND` |
-| hints (dry run) | read the printed hints | level 1-2 name no algorithm; level 5 is correct. Read them against the real editorial. |
+| hints (dry run) | read the printed hints | 2 to 5 hints (more for harder problems); the early hints name no algorithm; the last hint is a correct full walkthrough. Read them against the real editorial. The run ends with a `Usage:` line: tokens and dollars spent. |
 
 Re-run `insertProblem.ts` once more and recount the statuses: **they must not change** (the sync no longer resets
 pipeline state).
@@ -91,6 +92,8 @@ Only after the dry-run hints look right:
 ```bash
 ENV_FILE=$E venv/bin/python -u -m src.workers.hint_generator.generateHints --limit 5
 ```
+
+Multiply the `Usage:` cost per problem by the number of problems to replace the guesses in `docs/cost-estimate.md`.
 
 Then run the API against the project with the **publishable** key and ask it for a problem that has hints:
 

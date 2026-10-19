@@ -75,22 +75,26 @@ just waits), and the clock rule guards against a phase flag set early. Pure plan
 
 ## Phase 2: hint generator (`src/services/llm/`, `src/workers/hint_generator/`)
 
-- Provider: Gemini through the AI Studio REST API with plain `requests` (no new dependency), behind a small
-  `generate(system, user) -> str` interface so Vertex AI can replace it. Configured by `GEMINI_API_KEY` and
-  `GEMINI_MODEL`; **there is no default model** so a wrong name fails loudly instead of silently picking one.
-- Prompt (versioned, `PROMPT_VERSION`): five levels as in the blueprint (1 observation, 2 key idea, 3 algorithm,
-  4 edge cases and complexity, 5 full walkthrough in prose), Markdown with `$...$` math, no code, and the
-  explicit rule that levels 1-2 name no algorithm or data structure. Input: statement, input/output/interaction
-  sections, limits, samples, notes, and the editorial text if there is one. JSON output through
-  `responseSchema`.
-- Validation (`hintValidator.py`, pure): exactly levels 1-5 once each, non-empty, bounded length, and levels 1-2
-  free of a fixed list of algorithm / data-structure names (word-boundary match). A violation is retried twice
-  with the violation quoted back to the model; after that `hint_attempts` goes up and `last_error` says why;
-  at 5 attempts the problem becomes `FAILED`. This is a heuristic gate, not a proof; the pilot run is how
-  quality is judged.
-- Writes the five hints in **one** upsert (all or nothing), then sets `HINTS_GENERATED` last. Never called on a
-  user request.
-- `--dry-run` prints the hints and writes nothing; `--limit` (default 20) bounds cost.
+- Provider: **Claude Opus 5.5 at high effort** by default, through the Messages API with plain `requests` (no SDK
+  dependency): `output_config.effort`, schema-constrained JSON in `output_config.format`, thinking blocks ignored.
+  Configured by `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT`). `LLM_PROVIDER=gemini` still
+  selects the Gemini client. Both sit behind `generate(system, user, schema) -> str` plus a `.model` attribute.
+- **How many hints:** the model chooses 2 to 5 for each problem, guided by the rating (up to ~1000: 2, ~1000-1500: 3,
+  ~1500-2000: 4, above: 5) and adjusted by what the statement and editorial show. Hint 1 is always an observation, the
+  last hint is always the full walkthrough, and the ones in between go from key idea to details. Levels are numbered
+  1..N, which the database already allows (`hint_level` 1-5, unique per problem).
+- Prompt (versioned, `PROMPT_VERSION`, now `v2`): Markdown with `$...$` math, no code, no algorithm names before hint 3.
+  Input: statement, the input/output/interaction sections that exist, limits, samples, notes, and the editorial if there
+  is one.
+- Validation (`hintValidator.py`, pure): 2 to 5 hints numbered 1..N, non-empty, bounded length, no code blocks, and
+  hints 1-2 free of a fixed list of algorithm / data-structure names **unless that hint is the last one** (a two-hint
+  answer's second hint is the walkthrough). A violation is retried twice with the reason quoted back; after that
+  `hint_attempts` goes up and `last_error` says why; at 5 attempts the problem becomes `FAILED`. A truncated answer
+  (thinking used the 16,000-token output limit) counts as a failed attempt. This is a heuristic gate, not a proof.
+- Saving: all hints in one upsert, then levels above the new count are deleted (a regeneration with fewer hints cannot
+  leave old ones behind), then `HINTS_GENERATED` last. Never called on a user request.
+- Every run ends with a `Usage:` line (requests, input and output tokens, estimated dollars), also when it stops on an
+  error. `--dry-run` prints the hints and writes nothing; `--limit` (default 20) bounds cost. See `docs/cost-estimate.md`.
 
 ## Phase 4: public API (`src/api/`, option B)
 
@@ -151,8 +155,9 @@ stages in order and watch cost).
 **Not proven**
 - Anything against a real Supabase project: the migrations in the dashboard's SQL editor, real PostgREST answers,
   and the `anon` key's behaviour through Supabase's gateway. `docs/staging-runbook.md` has the checks.
-- Gemini: the request and response shapes follow the documented REST API but were never sent, so a wrong model id,
-  a schema the model rejects, or poor hint quality only shows up on the first `--dry-run`.
+- Claude and Gemini: the request and response shapes follow the documented APIs (Claude's from the docs read on
+  2026-10-19) but were never sent, so a rejected schema, an unexpected `usage` shape, thinking that exceeds the 16,000
+  output-token limit, or poor hint quality only shows up on the first `--dry-run`.
 - The Docker images and every `gcloud` command in `deploy/README.md`.
 - Cloud Run adding the client address as the *right-most* `X-Forwarded-For` entry (the rate limiter relies on it).
 - Statement fidelity beyond the pages checked; spot-check about ten stored statements after the first scrape.

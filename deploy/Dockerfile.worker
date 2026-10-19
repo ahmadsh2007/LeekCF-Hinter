@@ -8,5 +8,5 @@ COPY src ./src
 COPY deploy/run-pipeline.sh ./run-pipeline.sh
 RUN useradd --create-home worker && chmod +x run-pipeline.sh
 USER worker
-# Needs SUPABASE_DATABASE_URL, SUPABASE_DATABASE_SECRET_KEY, GEMINI_API_KEY and GEMINI_MODEL.
+# Needs SUPABASE_DATABASE_URL, SUPABASE_DATABASE_SECRET_KEY and ANTHROPIC_API_KEY.
 CMD ["./run-pipeline.sh"]

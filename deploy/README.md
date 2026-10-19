@@ -12,7 +12,7 @@ Three images, built from the repository root:
 |---|---|---|---|
 | `hints-api` | `deploy/Dockerfile.api` | the public API (a Cloud Run **service**) | `SUPABASE_DATABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` |
 | `hints-sync` | `deploy/Dockerfile.sync` | contest and problem sync from the Codeforces API (a **job**) | `SUPABASE_DATABASE_URL`, `SUPABASE_DATABASE_SECRET_KEY` |
-| `hints-worker` | `deploy/Dockerfile.worker` | `run-pipeline.sh`: scrape, dedup, protect, tutorials, hints (a **job**) | the two Supabase variables, `GEMINI_API_KEY`, `GEMINI_MODEL` |
+| `hints-worker` | `deploy/Dockerfile.worker` | `run-pipeline.sh`: scrape, dedup, protect, tutorials, hints (a **job**) | the two Supabase variables, `ANTHROPIC_API_KEY` |
 
 Secrets are never part of an image (`.dockerignore` excludes every `.env`); they are injected from Secret Manager.
 
@@ -30,7 +30,7 @@ gcloud artifacts repositories create hints --repository-format=docker --location
 Create the secrets (each command reads the value from your terminal; nothing is stored in shell history):
 
 ```bash
-for name in supabase-url supabase-secret-key supabase-publishable-key gemini-api-key; do
+for name in supabase-url supabase-secret-key supabase-publishable-key anthropic-api-key; do
   printf "Value for $name: " && read -rs value && echo
   printf %s "$value" | gcloud secrets create $name --data-file=-
 done
@@ -83,13 +83,13 @@ gcloud run jobs create hints-sync \
 
 gcloud run jobs create hints-pipeline \
   --image $REPO/hints-worker --region $REGION \
-  --set-secrets SUPABASE_DATABASE_URL=supabase-url:latest,SUPABASE_DATABASE_SECRET_KEY=supabase-secret-key:latest,GEMINI_API_KEY=gemini-api-key:latest \
-  --set-env-vars GEMINI_MODEL=put-the-model-id-here,HINT_LIMIT=20,INCLUDE_WITHOUT_TUTORIAL=false \
+  --set-secrets SUPABASE_DATABASE_URL=supabase-url:latest,SUPABASE_DATABASE_SECRET_KEY=supabase-secret-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest \
+  --set-env-vars HINT_LIMIT=20,INCLUDE_WITHOUT_TUTORIAL=false \
   --task-timeout 60m --max-retries 0
 ```
 
-Set `GEMINI_MODEL` to a real model id from https://ai.google.dev/gemini-api/docs/models. There is deliberately no default.
-Run both once by hand and read the logs before scheduling:
+The model defaults to Claude Opus 5.5 at high effort (`ANTHROPIC_MODEL` / `ANTHROPIC_EFFORT` change that). Each job run
+is capped by `HINT_LIMIT` problems, so it also caps spending per run. Run both once by hand and read the logs before scheduling:
 
 ```bash
 gcloud run jobs execute hints-sync --region $REGION --wait

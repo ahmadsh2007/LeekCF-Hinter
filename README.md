@@ -2,8 +2,8 @@
 
 A pipeline that builds progressive, spoiler-safe hints for Codeforces problems and serves them through a public,
 read-only API. It syncs problems from the Codeforces API, scrapes each statement, finds duplicates (the same problem
-in Div. 1 and Div. 2), waits until a contest is over, finds the official tutorial, asks Gemini for five graded
-hints, and serves them.
+in Div. 1 and Div. 2), waits until a contest is over, finds the official tutorial, asks Claude for graded
+hints (2 to 5, depending on the problem), and serves them.
 The full plan is in `Codeforces Hinter Architecture Blueprint copy.docx`; the designs are in `docs/superpowers/specs/`.
 To try everything on a throwaway Supabase project, follow `docs/staging-runbook.md`. To deploy, see `deploy/README.md`.
 
@@ -29,8 +29,9 @@ Not built: the browser extension. Hints are never generated for, or served from,
 - `npm install`
 - `python -m venv venv && venv/bin/pip install -r requirements.txt`
 - `config/.env` (not committed) needs `SUPABASE_DATABASE_URL` and `SUPABASE_DATABASE_SECRET_KEY`. The hint
-  generator also needs `GEMINI_API_KEY` and `GEMINI_MODEL` (no default model: pick one from
-  https://ai.google.dev/gemini-api/docs/models). The public API uses `SUPABASE_PUBLISHABLE_KEY` instead and refuses a secret key.
+  generator also needs `ANTHROPIC_API_KEY`; it uses Claude Opus 5.5 at high effort unless `ANTHROPIC_MODEL` /
+  `ANTHROPIC_EFFORT` say otherwise (`LLM_PROVIDER=gemini` with `GEMINI_API_KEY` and `GEMINI_MODEL` still works). What it costs:
+  `docs/cost-estimate.md`. The public API uses `SUPABASE_PUBLISHABLE_KEY` instead and refuses a secret key.
 - `config/IGNORE_THESE_CONTESTS` lists contest ids that are never added to the database.
 - To point any script at another project (e.g. a staging Supabase project) without touching `config/.env`, set
   `ENV_FILE`: `ENV_FILE=~/leekcf-env/staging.env venv/bin/python -u -m src.services.scraper.mainChecker`.
@@ -73,7 +74,7 @@ venv/bin/python -u -m src.workers.contest_monitor.contestProtector            # 
 # 5. Find the official tutorials (newest contests first; --limit counts contests)
 venv/bin/python -u -m src.workers.tutorial_finder.findTutorials --limit 50
 
-# 6. Generate hints. Try --dry-run first: it calls the model, prints the hints, writes nothing.
+# 6. Generate hints. Try --dry-run first: it calls the model, prints the hints and the tokens/cost used, writes nothing.
 venv/bin/python -u -m src.workers.hint_generator.generateHints --dry-run --limit 5
 venv/bin/python -u -m src.workers.hint_generator.generateHints --limit 20
 #    --include-without-tutorial also covers problems whose tutorial never turned up (hints are marked ungrounded)
@@ -98,7 +99,7 @@ GET /v1/problems/{contestId}/{index}/hints     e.g. /v1/problems/1944/C/hints
 GET /v1/health
 ```
 
-It returns the five hint levels (`level`, `content` in Markdown with `$...$` math), the problem's name, rating and tags,
+It returns 2 to 5 hint levels, easiest first (`level`, `content` in Markdown with `$...$` math), the problem's name, rating and tags,
 whether the hints are `groundedInTutorial`, and `duplicateOf` when the problem shares hints with its Div. 1 / Div. 2 twin.
 Statements and editorials are never served. A problem with no public hints is a plain `404`, whatever the reason
 (unknown, not processed yet, contest not over). Responses are cacheable, CORS is open for `GET`, and each client address is
@@ -106,7 +107,7 @@ rate limited (`429` with `Retry-After`).
 
 ## Tests
 
-Offline: nothing touches Codeforces, Supabase or Gemini.
+Offline: nothing touches Codeforces, Supabase or an LLM.
 
 ```bash
 venv/bin/python -m unittest discover -s tests
