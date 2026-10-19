@@ -16,11 +16,14 @@ class FakeQuery:
         self.containsFilters = []
         self.gtFilters = []
         self.orderColumn = None
+        self.orderColumns = []
+        self.countRequested = False
         self.rangeBounds = None
         self.onConflict = None
 
-    def select(self, columns="*"):
+    def select(self, columns="*", count=None):
         self.columns = columns
+        self.countRequested = count == "exact"
         return self
 
     def eq(self, column, value):
@@ -40,7 +43,8 @@ class FakeQuery:
         return self
 
     def order(self, column):
-        self.orderColumn = column
+        self.orderColumn = self.orderColumn or column  # the first one, kept for the older assertions
+        self.orderColumns.append(column)
         return self
 
     def range(self, start, end):
@@ -88,15 +92,16 @@ class FakeQuery:
             return SimpleNamespace(data=matched)
 
         rows = matched
-        if self.orderColumn:
-            rows.sort(key=lambda row: row[self.orderColumn])
+        total = len(matched)
+        if self.orderColumns:
+            rows.sort(key=lambda row: tuple(row[column] for column in self.orderColumns))
         if self.rangeBounds:
             start, end = self.rangeBounds
             rows = rows[start:end + 1]
         if self.columns != "*":
             wanted = [column.strip() for column in self.columns.split(",")]
             rows = [{column: row[column] for column in wanted} for row in rows]
-        return SimpleNamespace(data=rows)
+        return SimpleNamespace(data=rows, count=total if self.countRequested else None)
 
 
 class FakeSupabase:
