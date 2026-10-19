@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+import httpx
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from supabase.lib.client_options import SyncClientOptions
 
 # ENV_FILE points a run at another project (e.g. staging) without touching config/.env.
 envPath = Path(os.environ.get("ENV_FILE") or Path('.') / 'config' / '.env')
@@ -16,4 +18,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 print(f"Supabase target: {urlparse(SUPABASE_URL).hostname}")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Connection attempts that fail (e.g. "connection reset by peer") are retried a few times before an error surfaces;
+# the workers add their own retries and "try again later" handling on top (src/utils/retry.py).
+httpClient = httpx.Client(transport=httpx.HTTPTransport(retries=3), timeout=60.0)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY, options=SyncClientOptions(httpx_client=httpClient))
