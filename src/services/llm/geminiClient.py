@@ -80,14 +80,15 @@ class GeminiClient:
             raise TransientLlmError("Gemini API answered with something that is not JSON") from e
         return self.extractText(data)
 
+    def endpoint(self) -> str:
+        return f"{API_ROOT}/{self.model}:generateContent"
+
+    def headers(self) -> dict:
+        return {"x-goog-api-key": self.apiKey, "Content-Type": "application/json"}
+
     def post(self, body: dict):
         try:
-            return self.session.post(
-                f"{API_ROOT}/{self.model}:generateContent",
-                headers={"x-goog-api-key": self.apiKey, "Content-Type": "application/json"},
-                json=body,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
+            return self.session.post(self.endpoint(), headers=self.headers(), json=body, timeout=REQUEST_TIMEOUT_SECONDS)
         except requests.RequestException as e:
             raise TransientLlmError(f"Network error ({type(e).__name__}) calling the Gemini API: {e}") from e
 
