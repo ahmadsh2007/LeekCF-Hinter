@@ -18,7 +18,11 @@ MAX_OUTPUT_TOKENS = 16000
 REQUEST_TIMEOUT_SECONDS = 600
 # USD per million tokens (input, output): the standard prices on https://platform.claude.com/docs/en/about-claude/pricing,
 # read on 2026-10-19. Only used for the estimate printed after a run, never for any decision.
-PRICES_PER_MTOK = {"claude-opus-5-5": (4.0, 20.0)}
+PRICES_PER_MTOK = {
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+}
 
 class AnthropicClient:
     """

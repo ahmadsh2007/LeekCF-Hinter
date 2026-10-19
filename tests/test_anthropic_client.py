@@ -122,6 +122,12 @@ class ResponseTests(unittest.TestCase):
         self.assertIn("1,000,000 output", summary)
         self.assertIn("$24.00", summary)  # $4 input + $20 output per million tokens
 
+    def test_usage_summary_knows_the_prices_of_the_other_models_worth_comparing(self):
+        for model, expected in (("claude-fable-5-1", "$60.00"), ("claude-sonnet-5-5", "$12.00")):  # per 1M in + 1M out
+            client, _ = clientAnswering(FakeResponse(200, message(text("{}"), inputTokens=1_000_000, outputTokens=1_000_000)), model=model)
+            client.generate("s", "u", SCHEMA)
+            self.assertIn(expected, client.usageSummary(), model)
+
     def test_usage_summary_for_an_unpriced_model_has_no_dollar_figure(self):
         client, _ = clientAnswering(FakeResponse(200, message(text("{}"))), model="some-future-model")
         client.generate("s", "u", SCHEMA)
