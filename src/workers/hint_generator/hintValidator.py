@@ -13,14 +13,15 @@ MAX_HINT_CHARS = 4000
 # Names of algorithms and data structures that must not appear before hint 3. Multi-word terms also match their
 # plural and a hyphen for a space ("two-pointers"). Single words stay exact so ordinary words ("tries") are safe.
 EARLY_FORBIDDEN_TERMS = (
-    "dynamic programming", "dp", "greedy", "binary search", "ternary search", "two pointer", "sliding window",
+    "dynamic programming", "dp", "greedy", "greedily", "memoization", "memoisation", "memoize", "memoise", "binary search", "ternary search", "two pointer", "sliding window",
     "dsu", "union find", "disjoint set", "segment tree", "fenwick", "binary indexed tree", "sparse table",
     "bfs", "dfs", "breadth first", "depth first", "dijkstra", "bellman ford", "floyd warshall", "kruskal",
     "topological sort", "trie", "hashing", "sqrt decomposition", "bitmask", "meet in the middle",
     "divide and conquer", "prefix sum", "priority queue", "convex hull", "fft", "kmp", "z function",
     "manacher", "lca", "sieve", "matrix exponentiation", "inclusion exclusion", "monotonic stack",
     "monotone stack", "mo's algorithm", "heavy light", "centroid decomposition", "max flow", "min cost flow",
-    "bipartite matching", "2-sat", "knapsack",
+    "bipartite matching", "2-sat", "knapsack", "hash map", "hash table", "hashmap", "deque", "backtracking",
+    "bitmasks",
 )
 
 def termPattern(term: str) -> str:

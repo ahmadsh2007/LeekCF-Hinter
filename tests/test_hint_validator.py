@@ -150,6 +150,12 @@ class EarlyHintSpoilerTests(unittest.TestCase):
             ("This needs a trie.", "trie"),
             ("Consider a bitmask of the chosen items.", "bitmask"),
             ("Compute dp[i] from dp[i-1].", "dp"),
+            ("You should greedily take the largest coin.", "greedily"),
+            ("Memoization avoids repeated work.", "memoization"),
+            ("Memoize the results.", "memoize"),
+            ("Store them in a hash map.", "hash map"),
+            ("Try backtracking over the choices.", "backtracking"),
+            ("Each subset is a bitmasks over the items.", "bitmasks"),
         ]
         for level in EARLY_LEVELS:
             for sentence, term in cases:
@@ -162,8 +168,13 @@ class EarlyHintSpoilerTests(unittest.TestCase):
             self.assertEqual(len(validateHints(withText(level, text("x") + " " + sentence))), 5)
 
     def test_words_that_merely_contain_a_term_are_not_flagged(self):
-        harmless = "The bandpass filter and the deadpool of values, a greedily-named helper, adp, tries and retries are unrelated."
+        harmless = "The bandpass filter and the deadpool of values, a greedyish-named helper, adp, tries and retries, and the headpiece are unrelated."
         self.assertEqual(len(validateHints(withText(1, text("x") + " " + harmless))), 5)
+
+    def test_ordinary_words_that_look_like_techniques_are_not_flagged(self):
+        # "heaps of stones" is a game, not a data structure
+        sentence = "There are several heaps of stones, and a move takes stones from one heap."
+        self.assertEqual(len(validateHints(withText(1, sentence + " Notice that the parity of the total never changes."))), 5)
 
     def test_an_ordinary_observation_passes(self):
         observation = "Notice that the sum of the array never changes, so only the parity of $n$ matters."
