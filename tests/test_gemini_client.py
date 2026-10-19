@@ -51,9 +51,12 @@ class FakeSession:
 def answer(*texts, finishReason="STOP"):
     return {"candidates": [{"content": {"parts": [{"text": text} for text in texts]}, "finishReason": finishReason}]}
 
-def clientAnswering(response):
+def clientAnswering(response, **kwargs):
     session = FakeSession(response)
-    return GeminiClient("secret-key", "some-model", session=session), session
+    sleeps = []
+    client = GeminiClient("secret-key", "some-model", session=session, sleep=sleeps.append, **kwargs)
+    client.sleeps = sleeps
+    return client, session
 
 
 class RequestShapeTests(unittest.TestCase):
@@ -135,6 +138,84 @@ class ErrorTests(unittest.TestCase):
                 client.generate("s", "u", SCHEMA)
 
 
+class ThinkingTests(unittest.TestCase):
+    def test_thinking_is_left_to_the_model_by_default(self):
+        client, session = clientAnswering(FakeResponse(200, answer("{}")))
+        client.generate("s", "u", SCHEMA)
+        self.assertNotIn("thinkingConfig", session.calls[0]["json"]["generationConfig"])
+
+    def test_a_thinking_level_can_be_requested(self):
+        client, session = clientAnswering(FakeResponse(200, answer("{}")), thinkingLevel="high")
+        client.generate("s", "u", SCHEMA)
+        self.assertEqual(session.calls[0]["json"]["generationConfig"]["thinkingConfig"], {"thinkingLevel": "high"})
+
+    def test_an_unknown_thinking_level_is_refused_before_any_request(self):
+        with self.assertRaises(LlmConfigurationError):
+            GeminiClient("k", "m", thinkingLevel="extreme", session=FakeSession(FakeResponse()))
+
+    def test_thought_parts_are_not_part_of_the_answer(self):
+        body = {"candidates": [{"content": {"parts": [{"text": "let me think", "thought": True}, {"text": '{"hints": []}'}]}, "finishReason": "STOP"}]}
+        client, _ = clientAnswering(FakeResponse(200, body))
+        self.assertEqual(client.generate("s", "u", SCHEMA), '{"hints": []}')
+
+
+class UsageTests(unittest.TestCase):
+    def test_tokens_including_thinking_are_counted_and_summarised(self):
+        body = answer("{}")
+        body["usageMetadata"] = {"promptTokenCount": 2000, "candidatesTokenCount": 600, "thoughtsTokenCount": 1500}
+        client, _ = clientAnswering(FakeResponse(200, body))
+        client.generate("s", "u", SCHEMA)
+        client.generate("s", "u", SCHEMA)
+        self.assertEqual((client.requests, client.inputTokens, client.outputTokens, client.thinkingTokens), (2, 4000, 1200, 3000))
+        summary = client.usageSummary()
+        for fragment in ("2 request(s)", "4,000 input", "1,200 output", "3,000 thinking"):
+            self.assertIn(fragment, summary)
+
+    def test_a_response_without_usage_metadata_is_fine(self):
+        client, _ = clientAnswering(FakeResponse(200, answer("{}")))
+        client.generate("s", "u", SCHEMA)
+        self.assertEqual(client.inputTokens, 0)
+
+
+class RateLimitRetryTests(unittest.TestCase):
+    class Sequence:
+        def __init__(self, *responses):
+            self.responses = list(responses)
+            self.calls = []
+
+        def post(self, url, headers=None, json=None, timeout=None):
+            self.calls.append(url)
+            return self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
+
+    def clientWith(self, *responses):
+        sleeps = []
+        client = GeminiClient("k", "m", session=self.Sequence(*responses), sleep=sleeps.append)
+        return client, sleeps
+
+    def test_a_per_minute_limit_is_waited_out_and_retried(self):
+        client, sleeps = self.clientWith(FakeResponse(429, {}), FakeResponse(200, answer("{}")))
+        self.assertEqual(client.generate("s", "u", SCHEMA), "{}")
+        self.assertEqual(sleeps, [20])
+
+    def test_an_overloaded_model_is_retried_too(self):
+        client, sleeps = self.clientWith(FakeResponse(503, {}), FakeResponse(503, {}), FakeResponse(200, answer("{}")))
+        self.assertEqual(client.generate("s", "u", SCHEMA), "{}")
+        self.assertEqual(sleeps, [20, 40])
+
+    def test_after_three_waits_it_gives_up_as_transient(self):
+        client, sleeps = self.clientWith(FakeResponse(429, {}))
+        with self.assertRaises(TransientLlmError):
+            client.generate("s", "u", SCHEMA)
+        self.assertEqual(sleeps, [20, 40, 80])
+        self.assertEqual(len(client.session.calls), 4)
+
+    def test_other_server_errors_are_not_retried_here(self):
+        client, sleeps = self.clientWith(FakeResponse(500, {}))
+        with self.assertRaises(TransientLlmError):
+            client.generate("s", "u", SCHEMA)
+        self.assertEqual(sleeps, [])
+
+
 class EnvironmentTests(unittest.TestCase):
     def test_builds_a_client_from_the_two_variables(self):
         client = clientFromEnvironment({"GEMINI_API_KEY": "k", "GEMINI_MODEL": "m"})
@@ -147,6 +228,11 @@ class EnvironmentTests(unittest.TestCase):
         with self.assertRaises(LlmConfigurationError) as noModel:
             clientFromEnvironment({"GEMINI_API_KEY": "k"})
         self.assertIn("GEMINI_MODEL", str(noModel.exception))
+
+    def test_the_thinking_level_comes_from_the_environment_when_set(self):
+        client = clientFromEnvironment({"GEMINI_API_KEY": "k", "GEMINI_MODEL": "m", "GEMINI_THINKING_LEVEL": "high"})
+        self.assertEqual(client.thinkingLevel, "high")
+        self.assertIsNone(clientFromEnvironment({"GEMINI_API_KEY": "k", "GEMINI_MODEL": "m"}).thinkingLevel)
 
     def test_blank_values_count_as_missing(self):
         with self.assertRaises(LlmConfigurationError):
