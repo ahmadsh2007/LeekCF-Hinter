@@ -1,9 +1,11 @@
 import argparse
 import time
 import traceback
+import httpx
 from src.services.scraper.errors import ScrapingValidationError, TransientScrapeError
 from src.services.scraper.problemParser import parse_problem_details_strictly
 from src.services.scraper.problemScraper import scrapeProblemPage
+from src.utils.retry import retryOnNetworkErrors
 
 # A problem that keeps failing for transient reasons is given up on after this many attempts.
 MAX_SCRAPE_ATTEMPTS = 5
@@ -25,6 +27,18 @@ def markFailed(client, problemId: str, message: str):
     client.table("problems").update({
         "stage_status": "FAILED",
         "last_error": message,
+        "updated_at": "now()"
+    }).eq("id", problemId).execute()
+
+def storeScrapedProblem(client, problemId: str, specs: dict, samples: list) -> None:
+    client.table("problem_specifications").upsert(specs).execute()
+    if samples:  # a few problems have none, and an empty upsert would be a pointless request
+        client.table("sample_tests").upsert(samples).execute()
+
+    # Update status ONLY after all data is safely stored
+    client.table("problems").update({
+        "stage_status": "SCRAPED_WAITING_FOR_CONTEST",
+        "last_error": None,
         "updated_at": "now()"
     }).eq("id", problemId).execute()
 
@@ -67,17 +81,8 @@ def checkAndProcessProblem(client, limit: int = DEFAULT_LIMIT, delaySeconds: flo
             for sample in samples:
                 sample["problem_id"] = problemId
 
-            # Upsert both tables cleanly
-            client.table("problem_specifications").upsert(specs).execute()
-            if samples:  # a few problems have none, and an empty upsert would be a pointless request
-                client.table("sample_tests").upsert(samples).execute()
-
-            # Update status ONLY after all data is safely stored
-            client.table("problems").update({
-                "stage_status": "SCRAPED_WAITING_FOR_CONTEST",
-                "last_error": None,
-                "updated_at": "now()"
-            }).eq("id", problemId).execute()
+            # Safe to repeat: upserts and a status update. The status is written last, so a problem is never half done.
+            retryOnNetworkErrors(lambda: storeScrapedProblem(client, problemId, specs, samples), sleep=sleep)
 
             counts["scraped"] += 1
             consecutiveTransientFailures = 0
@@ -105,6 +110,17 @@ def checkAndProcessProblem(client, limit: int = DEFAULT_LIMIT, delaySeconds: flo
             markFailed(client, problemId, str(ve))
             counts["failed"] += 1
             consecutiveTransientFailures = 0
+
+        except httpx.TransportError as e:
+            # The database was unreachable even after retries. That says nothing about the problem: leave it as it
+            # is (still DISCOVERED, no attempt used) and stop if this keeps happening.
+            print(f"[DATABASE UNREACHABLE -> RETRY LATER] Problem {problemId}: {e}")
+            counts["retry_later"] += 1
+            consecutiveTransientFailures += 1
+            if consecutiveTransientFailures >= MAX_CONSECUTIVE_TRANSIENT_FAILURES:
+                print(f"Stopping: {consecutiveTransientFailures} failures in a row. "
+                      "The database or the network is probably down; run it again later.")
+                break
 
         except Exception as e:
             print(f"[CRITICAL ERROR -> FAILED] Unexpected system failure for problem {problemId}: {str(e)}")

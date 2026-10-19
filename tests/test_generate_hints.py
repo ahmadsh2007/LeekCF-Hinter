@@ -282,6 +282,58 @@ class RejectedAnswerTests(unittest.TestCase):
         self.assertIn("tutorial", updatesOf(client)[0].payload["last_error"])
 
 
+class DatabaseTroubleTests(unittest.TestCase):
+    """A dropped database connection must neither crash the run nor waste a paid answer when avoidable."""
+
+    def world(self, networkFailures, problems=None):
+        client = world(problems)
+        client.networkFailures = dict(networkFailures)
+        return client
+
+    def test_a_blip_while_loading_the_problem_is_retried(self):
+        client = self.world({("problem_specifications", "select"): 1})
+        llm = FakeLlm()
+        result = go(client, llm)
+        self.assertEqual(result["generated"], 1)
+        self.assertEqual(len(llm.calls), 1)
+
+    def test_a_blip_while_saving_is_retried_without_asking_the_model_again(self):
+        client = self.world({("hints", "upsert"): 2})
+        llm = FakeLlm()
+        result = go(client, llm)
+        self.assertEqual(result["generated"], 1)
+        self.assertEqual(len(llm.calls), 1)  # the paid answer was not thrown away
+        self.assertEqual(len(client.writes("hints", "upsert")), 3)
+        self.assertEqual(updatesOf(client)[0].payload["stage_status"], "HINTS_GENERATED")
+
+    def test_a_database_that_stays_down_changes_nothing_and_is_not_a_failed_attempt(self):
+        client = self.world({("problem_specifications", "select"): 999})
+        llm = FakeLlm()
+        result = go(client, llm)
+        self.assertEqual(llm.calls, [])
+        self.assertEqual(updatesOf(client), [])
+        self.assertEqual(result["transient_failures"], 1)
+        self.assertEqual(result["retry_later"], 0)
+
+    def test_losing_the_database_after_the_answer_leaves_the_problem_unchanged(self):
+        client = self.world({("hints", "upsert"): 999})
+        result = go(client, FakeLlm())
+        self.assertEqual(updatesOf(client), [])  # still TUTORIAL_FOUND, no attempt used
+        self.assertEqual(result["generated"], 0)
+        self.assertEqual(result["transient_failures"], 1)
+
+    def test_the_run_stops_when_the_database_keeps_failing(self):
+        count = MAX_CONSECUTIVE_TRANSIENT_FAILURES + 3
+        client = self.world({("problem_specifications", "select"): 9999}, [problem(f"1_{i:02d}") for i in range(count)])
+        result = go(client, FakeLlm())
+        self.assertEqual(result["transient_failures"], MAX_CONSECUTIVE_TRANSIENT_FAILURES)
+
+    def test_failing_to_record_a_failure_does_not_crash_the_run(self):
+        client = self.world({("problems", "update"): 999})
+        result = go(client, FakeLlm(*[badAnswer()] * (1 + MAX_FORMAT_RETRIES)))
+        self.assertEqual(result["generated"], 0)
+
+
 class ProviderTroubleTests(unittest.TestCase):
     def test_a_transient_error_changes_nothing_and_the_run_goes_on(self):
         client = world([problem("1_A"), problem("1_B")])

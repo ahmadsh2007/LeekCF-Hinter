@@ -165,6 +165,29 @@ class SharedPostAndDuplicateTests(unittest.TestCase):
         self.assertTrue(all(call.eqFilters == [("stage_status", "DUPLICATE")] for call in lookups))
 
 
+class DatabaseTroubleTests(unittest.TestCase):
+    def test_a_blip_while_saving_is_retried_and_the_tutorial_is_kept(self):
+        client = FakeSupabase({"problems": [waiting("1_A", 1)]}, networkFailures={("tutorials", "upsert"): 2})
+        source = FakeSource(links={1: ["u"]}, posts={"u": post("u", sections={"1_A": f"a{LONG}"})})
+        result = run(client, source, sleep=lambda seconds: None)
+        self.assertEqual(result["found"], 1)
+        self.assertEqual(promotedIds(client), ["1_A"])
+
+    def test_a_database_that_stays_down_skips_that_contest_and_carries_on(self):
+        client = FakeSupabase({"problems": [waiting("1_A", 1), waiting("2_A", 2)]}, networkFailures={("tutorials", "upsert"): 4})
+        source = FakeSource(links={1: ["u1"], 2: ["u2"]}, posts={"u1": post("u1", sections={"1_A": f"a{LONG}"}), "u2": post("u2", sections={"2_A": f"b{LONG}"})})
+        result = run(client, source, sleep=lambda seconds: None)
+        # contest 2 is visited first (newest first) and loses its save; contest 1 then saves normally
+        self.assertEqual(promotedIds(client), ["1_A"])
+        self.assertEqual(result["transient_failures"], 1)
+        self.assertEqual(result["found"], 1)  # the contest whose save failed is not counted as done
+
+    def test_a_blip_while_loading_the_waiting_problems_is_retried(self):
+        client = FakeSupabase({"problems": [waiting("1_A", 1)]}, networkFailures={("problems", "select"): 1})
+        source = FakeSource(links={1: []})
+        self.assertEqual(run(client, source, sleep=lambda seconds: None)["no_tutorial_yet"], 1)
+
+
 class FailureHandlingTests(unittest.TestCase):
     def test_a_transient_failure_skips_that_contest_and_carries_on(self):
         client = FakeSupabase({"problems": [waiting("1_A", 1), waiting("2_A", 2)]})

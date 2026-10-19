@@ -1,6 +1,10 @@
 import argparse
+import time
 from dataclasses import dataclass
+
+import httpx
 from src.services.scraper.errors import ScrapingValidationError, TransientScrapeError
+from src.utils.retry import retryOnNetworkErrors
 from src.utils.supabasePaging import fetchAllRows
 from src.workers.tutorial_finder.tutorialSource import CodeforcesTutorialSource, TutorialPost
 
@@ -76,8 +80,8 @@ def saveTutorials(client, tutorials: dict[str, tuple[str, str, int]]) -> None:
             .execute()
         )
 
-def run(client, source, contestLimit: int = DEFAULT_CONTEST_LIMIT) -> dict[str, int]:
-    waiting = loadWaitingProblems(client)
+def run(client, source, contestLimit: int = DEFAULT_CONTEST_LIMIT, sleep=time.sleep) -> dict[str, int]:
+    waiting = retryOnNetworkErrors(lambda: loadWaitingProblems(client), sleep=sleep)
     counts = {"found": 0, "no_tutorial_yet": 0, "not_found": 0, "transient_failures": 0}
     streak = FailureStreak()
     settled: set[str] = set()
@@ -158,7 +162,13 @@ def run(client, source, contestLimit: int = DEFAULT_CONTEST_LIMIT) -> dict[str, 
                     print(f"Found the tutorial of {problem.id} in {url}")
 
         if saved:
-            saveTutorials(client, saved)
+            try:
+                retryOnNetworkErrors(lambda: saveTutorials(client, saved), sleep=sleep)
+            except httpx.TransportError as e:
+                # Nothing is lost: the status only moves after the tutorial is stored, so the next run finds it again.
+                print(f"[RETRY LATER] contest {contestId}: could not save to the database: {e}")
+                streak.failed()
+                continue
             settled.update(saved)
             counts["found"] += len(saved)
 

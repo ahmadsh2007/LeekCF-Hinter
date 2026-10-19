@@ -1,6 +1,8 @@
 """An in-memory stand-in for the supabase-py query builder, just rich enough for the worker and admin tests."""
 from types import SimpleNamespace
 
+import httpx
+
 
 class FakeQuery:
     def __init__(self, client, tableName):
@@ -70,6 +72,11 @@ class FakeQuery:
 
     def execute(self):
         self.client.calls.append(self)
+        # Failure injection: the first N executes of a (table, operation) fail like a dropped connection.
+        key = (self.tableName, self.operation)
+        if self.client.networkFailures.get(key, 0) > 0:
+            self.client.networkFailures[key] -= 1
+            raise httpx.ConnectError("Connection reset by peer")
         if self.operation in ("update", "upsert"):
             return SimpleNamespace(data=[])
 
@@ -93,9 +100,10 @@ class FakeQuery:
 
 
 class FakeSupabase:
-    def __init__(self, tables=None):
+    def __init__(self, tables=None, networkFailures=None):
         self.tables = tables or {}
         self.calls = []
+        self.networkFailures = dict(networkFailures or {})
 
     def table(self, tableName):
         return FakeQuery(self, tableName)

@@ -1,6 +1,8 @@
 import unittest
 from types import SimpleNamespace
 
+import httpx
+
 from src.services.scraper.errors import ScrapingValidationError, TransientScrapeError
 from src.services.scraper.mainChecker import (
     MAX_CONSECUTIVE_TRANSIENT_FAILURES,
@@ -50,6 +52,10 @@ class FakeQuery:
 
     def execute(self):
         self.client.calls.append(self)
+        key = (self.tableName, self.operation)
+        if self.client.networkFailures.get(key, 0) > 0:
+            self.client.networkFailures[key] -= 1
+            raise httpx.ConnectError("Connection reset by peer")
         if self.operation == "upsert" and self.tableName in self.client.failingUpsertTables:
             raise RuntimeError(f"boom on {self.tableName}")
         data = self.client.problems if self.operation == "select" else []
@@ -57,8 +63,9 @@ class FakeQuery:
 
 
 class FakeClient:
-    def __init__(self, problems, failingUpsertTables=()):
+    def __init__(self, problems, failingUpsertTables=(), networkFailures=None):
         self.problems = problems
+        self.networkFailures = dict(networkFailures or {})
         self.calls = []
         self.failingUpsertTables = set(failingUpsertTables)
 
@@ -130,6 +137,32 @@ class SelectionTests(unittest.TestCase):
         counts, sleeps = runBatch(FakeClient([]), scripted([]), delaySeconds=2.0)
         self.assertEqual(counts, {"scraped": 0, "failed": 0, "retry_later": 0})
         self.assertEqual(sleeps, [])
+
+
+class DatabaseTroubleTests(unittest.TestCase):
+    """A dropped connection to the database is not the problem's fault: it must never end up FAILED."""
+
+    def test_a_dropped_connection_while_saving_is_retried_and_the_problem_is_still_scraped(self):
+        client = FakeClient(problemRows(1), networkFailures={("problem_specifications", "upsert"): 2})
+        counts, sleeps = runBatch(client, scripted([buildPage()]))
+        self.assertEqual(counts["scraped"], 1)
+        self.assertEqual(len(client.writesTo("problem_specifications", "upsert")), 3)
+        self.assertEqual(client.statusUpdates()[0][1]["stage_status"], "SCRAPED_WAITING_FOR_CONTEST")
+        self.assertEqual(sleeps, [2, 5])
+
+    def test_a_database_that_stays_down_leaves_the_problem_untouched(self):
+        client = FakeClient(problemRows(1), networkFailures={("problem_specifications", "upsert"): 99})
+        counts, _ = runBatch(client, scripted([buildPage()]))
+        self.assertEqual(counts, {"scraped": 0, "failed": 0, "retry_later": 1})
+        self.assertEqual(client.statusUpdates(), [])  # not FAILED, and its attempts are not used up
+
+    def test_the_batch_stops_when_the_database_keeps_failing(self):
+        count = MAX_CONSECUTIVE_TRANSIENT_FAILURES + 2
+        client = FakeClient(problemRows(count), networkFailures={("problem_specifications", "upsert"): 999})
+        fetch = scripted([buildPage() for _ in range(count)])
+        counts, _ = runBatch(client, fetch)
+        self.assertEqual(len(fetch.calls), MAX_CONSECUTIVE_TRANSIENT_FAILURES)
+        self.assertEqual(counts["retry_later"], MAX_CONSECUTIVE_TRANSIENT_FAILURES)
 
 
 class SuccessTests(unittest.TestCase):

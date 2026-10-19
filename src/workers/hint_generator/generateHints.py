@@ -1,6 +1,7 @@
 import argparse
 import sys
 import time
+import httpx
 from datetime import datetime, timedelta, timezone
 from src.services.llm.errors import LlmBlockedError, LlmRequestError, LlmTruncatedError, TransientLlmError
 from src.services.llm.llmProvider import createClientFromEnvironment
@@ -11,6 +12,7 @@ from src.services.llm.hintPrompt import (
     ProblemForHints,
     buildUserPrompt,
 )
+from src.utils.retry import retryOnNetworkErrors
 from src.utils.supabasePaging import fetchAllRows
 from src.workers.contest_monitor.contestProtector import fetchContests, isContestOver, parseTimestamp
 from src.workers.hint_generator.hintValidator import Hint, HintValidationError, validateHints
@@ -155,7 +157,10 @@ def run(client, llm, limit: int = DEFAULT_LIMIT, includeWithoutTutorial: bool = 
     def recordFailure(row: dict, message: str) -> None:
         update = buildFailureUpdate(row["hint_attempts"], message)
         if not dryRun:
-            client.table("problems").update(update).eq("id", row["id"]).execute()
+            try:
+                retryOnNetworkErrors(lambda: client.table("problems").update(update).eq("id", row["id"]).execute(), sleep=sleep)
+            except httpx.TransportError as e:
+                print(f"Could not record the failure of {row['id']} (database unreachable): {e}")
         if update.get("stage_status") == "FAILED":
             counts["failed"] += 1
             print(f"[GAVE UP -> FAILED] {row['id']} after {update['hint_attempts']} attempts: {message}")
@@ -169,9 +174,16 @@ def run(client, llm, limit: int = DEFAULT_LIMIT, includeWithoutTutorial: bool = 
                 sleep(delaySeconds)
 
             try:
-                problem, grounded = loadProblem(client, row)
+                problem, grounded = retryOnNetworkErrors(lambda: loadProblem(client, row), sleep=sleep)
                 print(f"Generating hints for {row['id']} ({'with' if grounded else 'without'} editorial)...")
                 hints = generateValidHints(llm, problem)
+                if dryRun:
+                    for hint in hints:
+                        print(f"  [{row['id']}] Hint {hint.level}: {hint.content}")
+                else:
+                    # Safe to repeat (upsert, delete, guarded update), and retried so that an answer that was already
+                    # paid for is not thrown away because of a dropped connection.
+                    retryOnNetworkErrors(lambda: saveHints(client, row, hints, llm.model, grounded), sleep=sleep)
             except MissingDataError as e:
                 recordFailure(row, str(e))
                 continue
@@ -181,23 +193,20 @@ def run(client, llm, limit: int = DEFAULT_LIMIT, includeWithoutTutorial: bool = 
             except (LlmBlockedError, LlmTruncatedError) as e:
                 recordFailure(row, str(e))
                 continue
-            except TransientLlmError as e:
+            except (TransientLlmError, httpx.TransportError) as e:
+                # A rate limit, an outage, or an unreachable database: nothing is wrong with the problem, so it keeps
+                # its status and no attempt is used up.
                 print(f"[RETRY LATER] {row['id']}: {e}")
                 counts["transient_failures"] += 1
                 consecutiveTransientFailures += 1
                 if consecutiveTransientFailures >= MAX_CONSECUTIVE_TRANSIENT_FAILURES:
-                    print(f"Stopping: {consecutiveTransientFailures} provider errors in a row. "
-                          "The API is probably rate limiting or down; wait before running again.")
+                    print(f"Stopping: {consecutiveTransientFailures} provider or database errors in a row. "
+                          "The API or the database is probably down or rate limiting; wait before running again.")
                     break
                 continue
             # An LlmRequestError (bad key, unknown model) is deliberately not caught: every call would fail.
 
             consecutiveTransientFailures = 0
-            if dryRun:
-                for hint in hints:
-                    print(f"  [{row['id']}] Hint {hint.level}: {hint.content}")
-            else:
-                saveHints(client, row, hints, llm.model, grounded)
             counts["generated"] += 1
     finally:
         # Printed however the run ends (also on a bad key), so money spent is never invisible.
