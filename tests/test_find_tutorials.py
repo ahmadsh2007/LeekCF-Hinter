@@ -1,9 +1,11 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from src.services.scraper.errors import ScrapingValidationError, TransientScrapeError
 from src.workers.tutorial_finder.findTutorials import (
     DUPLICATE_FETCH_CHUNK_SIZE,
     MAX_CONSECUTIVE_TRANSIENT_FAILURES,
+    NO_TUTORIAL_NOTE,
     run,
 )
 from src.workers.tutorial_finder.tutorialSource import TutorialPost
@@ -12,11 +14,16 @@ from tests.fakeSupabase import FakeSupabase
 LONG = " This explanation is long enough to be a tutorial."
 
 
-def waiting(problemId, contestId):
-    return {"id": problemId, "contest_id": contestId, "stage_status": "WAITING_FOR_TUTORIAL", "canonical_problem_id": None}
+NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
+LONG_AGO = (NOW - timedelta(days=30)).isoformat()
+
+def waiting(problemId, contestId, lastError=None, updatedAt=LONG_AGO):
+    return {"id": problemId, "contest_id": contestId, "stage_status": "WAITING_FOR_TUTORIAL", "canonical_problem_id": None,
+            "last_error": lastError, "updated_at": updatedAt}
 
 def duplicate(problemId, contestId, canonicalId):
-    return {"id": problemId, "contest_id": contestId, "stage_status": "DUPLICATE", "canonical_problem_id": canonicalId}
+    return {"id": problemId, "contest_id": contestId, "stage_status": "DUPLICATE", "canonical_problem_id": canonicalId,
+            "last_error": None, "updated_at": LONG_AGO}
 
 def post(url, sections=None, dynamic=None):
     return TutorialPost(url=url, sections=sections or {}, dynamic=dynamic or {}, csrfToken="tok")
@@ -55,7 +62,9 @@ def tutorialRows(client):
     return [row for call in client.writes("tutorials", "upsert") for row in call.payload]
 
 def promotedIds(client):
-    return [i for call in client.writes("problems", "update") for i in call.inFilters[0][1]]
+    """Ids moved on to TUTORIAL_FOUND (the "checked, nothing yet" notes are a different kind of update)."""
+    return [i for call in client.writes("problems", "update") if call.payload.get("stage_status") == "TUTORIAL_FOUND"
+            for i in call.inFilters[0][1]]
 
 
 class SavingTests(unittest.TestCase):
@@ -73,8 +82,7 @@ class SavingTests(unittest.TestCase):
             "author": None, "scraped_at": "now()",
         }])
         update = client.writes("problems", "update")[0]
-        self.assertEqual(update.payload["stage_status"], "TUTORIAL_FOUND")
-        self.assertEqual(update.payload["updated_at"], "now()")
+        self.assertEqual(update.payload, {"stage_status": "TUTORIAL_FOUND", "last_error": None, "updated_at": "now()"})
         self.assertEqual(update.eqFilters, [("stage_status", "WAITING_FOR_TUTORIAL")])
         self.assertEqual(update.inFilters, [("id", ["1_A"])])
         self.assertEqual(result["found"], 1)
@@ -109,11 +117,12 @@ class SavingTests(unittest.TestCase):
         self.assertEqual([row["problem_id"] for row in tutorialRows(client)], ["1_A"])
         self.assertEqual(promotedIds(client), ["1_A"])
 
-    def test_contest_without_a_tutorial_yet_changes_nothing(self):
+    def test_contest_without_a_tutorial_yet_keeps_its_problems_waiting(self):
         client = FakeSupabase({"problems": [waiting("1_A", 1)]})
         result = run(client, FakeSource(links={1: []}))
         self.assertEqual(client.writes("tutorials", "upsert"), [])
-        self.assertEqual(client.writes("problems", "update"), [])
+        self.assertEqual(promotedIds(client), [])
+        self.assertEqual([u.payload["last_error"] for u in client.writes("problems", "update")], [NO_TUTORIAL_NOTE])
         self.assertEqual(result["no_tutorial_yet"], 1)
 
     def test_nothing_waiting_means_no_requests(self):
@@ -163,6 +172,81 @@ class SharedPostAndDuplicateTests(unittest.TestCase):
         lookups = [call for call in client.selects("problems") if call.inFilters and call.inFilters[0][0] == "canonical_problem_id"]
         self.assertEqual([len(call.inFilters[0][1]) for call in lookups], [DUPLICATE_FETCH_CHUNK_SIZE, 5])
         self.assertTrue(all(call.eqFilters == [("stage_status", "DUPLICATE")] for call in lookups))
+
+
+def noteUpdates(client):
+    return [u for u in client.writes("problems", "update") if u.payload.get("last_error") == NO_TUTORIAL_NOTE]
+
+def checked(problemId, contestId, hoursAgo):
+    return waiting(problemId, contestId, lastError=NO_TUTORIAL_NOTE, updatedAt=(NOW - timedelta(hours=hoursAgo)).isoformat())
+
+
+class RecheckTests(unittest.TestCase):
+    """A contest with no tutorial yet is looked at again only after a while, not on every run."""
+
+    def test_a_contest_without_a_tutorial_is_noted_so_it_is_not_asked_again_at_once(self):
+        client = FakeSupabase({"problems": [waiting("1_A", 1), waiting("1_B", 1)]})
+        run(client, FakeSource(links={1: []}), now=NOW)
+        update = noteUpdates(client)[0]
+        self.assertEqual(update.payload, {"last_error": NO_TUTORIAL_NOTE, "updated_at": "now()"})
+        self.assertEqual(update.inFilters, [("id", ["1_A", "1_B"])])
+        self.assertEqual(update.eqFilters, [("stage_status", "WAITING_FOR_TUTORIAL")])
+
+    def test_a_post_that_does_not_cover_a_problem_notes_that_problem_too(self):
+        client = FakeSupabase({"problems": [waiting("1_A", 1), waiting("1_B", 1)]})
+        run(client, FakeSource(links={1: ["u"]}, posts={"u": post("u", sections={"1_A": f"a{LONG}"})}), now=NOW)
+        self.assertEqual(noteUpdates(client)[0].inFilters, [("id", ["1_B"])])
+
+    def test_problems_checked_recently_are_skipped_without_any_request(self):
+        client = FakeSupabase({"problems": [checked("1_A", 1, hoursAgo=3)]})
+        source = FakeSource(links={1: ["u"]}, posts={"u": post("u", sections={"1_A": f"a{LONG}"})})
+        result = run(client, source, now=NOW)
+        self.assertEqual(source.calls, [])
+        self.assertEqual(result["skipped_recently_checked"], 1)
+
+    def test_they_are_looked_at_again_after_the_wait(self):
+        client = FakeSupabase({"problems": [checked("1_A", 1, hoursAgo=25)]})
+        source = FakeSource(links={1: ["u"]}, posts={"u": post("u", sections={"1_A": f"a{LONG}"})})
+        result = run(client, source, now=NOW)
+        self.assertEqual(result["found"], 1)
+        self.assertEqual(result["skipped_recently_checked"], 0)
+
+    def test_the_wait_can_be_changed_or_switched_off(self):
+        client = FakeSupabase({"problems": [checked("1_A", 1, hoursAgo=3)]})
+        self.assertEqual(run(client, FakeSource(links={1: []}), now=NOW, recheckAfterHours=2)["no_tutorial_yet"], 1)
+        client = FakeSupabase({"problems": [checked("1_A", 1, hoursAgo=0.1)]})
+        self.assertEqual(run(client, FakeSource(links={1: []}), now=NOW, recheckAfterHours=0)["no_tutorial_yet"], 1)
+
+    def test_only_the_note_makes_a_problem_skippable_not_other_errors_or_fresh_updates(self):
+        other = waiting("1_A", 1, lastError="Unexpected error: boom", updatedAt=(NOW - timedelta(hours=1)).isoformat())
+        fresh = waiting("1_B", 1, lastError=None, updatedAt=(NOW - timedelta(minutes=5)).isoformat())
+        source = FakeSource(links={1: []})
+        result = run(FakeSupabase({"problems": [other, fresh]}), source, now=NOW)
+        self.assertEqual(result["skipped_recently_checked"], 0)
+        self.assertEqual(result["no_tutorial_yet"], 1)
+
+    def test_a_contest_that_could_not_be_checked_is_not_noted(self):
+        client = FakeSupabase({"problems": [waiting("1_A", 1)]})
+        run(client, FakeSource(links={1: TransientScrapeError("HTTP 403")}), now=NOW)
+        self.assertEqual(noteUpdates(client), [])
+
+    def test_a_post_that_failed_to_load_does_not_note_its_problems(self):
+        client = FakeSupabase({"problems": [waiting("1_A", 1)]})
+        run(client, FakeSource(links={1: ["u"]}, posts={"u": TransientScrapeError("HTTP 429")}), now=NOW)
+        self.assertEqual(noteUpdates(client), [])
+
+    def test_a_found_tutorial_clears_an_earlier_note(self):
+        client = FakeSupabase({"problems": [checked("1_A", 1, hoursAgo=30)]})
+        run(client, FakeSource(links={1: ["u"]}, posts={"u": post("u", sections={"1_A": f"a{LONG}"})}), now=NOW)
+        self.assertIsNone(client.writes("problems", "update")[-1].payload["last_error"])
+
+    def test_old_stuck_contests_do_not_starve_the_ones_behind_them(self):
+        # 3 stuck contests were checked an hour ago; with a limit of 3 contests the run must reach the older, fresh ones.
+        stuck = [checked(f"{c}_A", c, hoursAgo=1) for c in (9, 8, 7)]
+        fresh = [waiting("2_A", 2), waiting("1_A", 1)]
+        source = FakeSource(links={2: ["u"], 1: ["u"]}, posts={"u": post("u", sections={"2_A": f"a{LONG}", "1_A": f"b{LONG}"})})
+        result = run(FakeSupabase({"problems": stuck + fresh}), source, contestLimit=3, now=NOW)
+        self.assertEqual(result["found"], 2)
 
 
 class DatabaseTroubleTests(unittest.TestCase):
