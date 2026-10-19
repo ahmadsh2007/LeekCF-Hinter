@@ -73,4 +73,4 @@ commercially. The one condition is credit: keep the copyright notice and the `NO
 ### Credits
 
 Problems and editorials belong to their authors and to Codeforces; Hinter links back to every problem and serves only
-the hints. Code: https://github.com/ahmadsh2007/LeekCF-Hinter (Apache-2.0). Created by ahmadsh2007.
+the hints. Code: https://github.com/ahmadsh2007/LeekCF-Hinter (Apache-2.0). Created by Ahmad Z. Shatnawi (Leeking).

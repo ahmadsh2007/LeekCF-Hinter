@@ -143,7 +143,7 @@ Free to use, copy, modify and build on, including commercially, under the [Apach
 in return is credit: if you copy or redistribute this project or a work based on it, you must keep the copyright notice and the
 [NOTICE](NOTICE) file, which names the author, and say what you changed.
 
-Created by [@ahmadsh2007](https://github.com/ahmadsh2007).
+Created by Ahmad Z. Shatnawi, known online as Leeking ([@ahmadsh2007](https://github.com/ahmadsh2007)).
 
 ## Support the project
 
