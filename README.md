@@ -5,7 +5,9 @@ read-only API. It syncs problems from the Codeforces API, scrapes each statement
 in Div. 1 and Div. 2), waits until a contest is over, finds the official tutorial, asks Claude for graded
 hints (2 to 5, depending on the problem), and serves them.
 The full plan is in `Codeforces Hinter Architecture Blueprint copy.docx`; the designs are in `docs/superpowers/specs/`.
-To try everything on a throwaway Supabase project, follow `docs/staging-runbook.md`. To deploy, see `deploy/README.md`.
+To try everything on a throwaway Supabase project, follow `docs/staging-runbook.md`. To put the API online for free, see
+`docs/launch.md`; to run the pipeline automatically, `docs/automation.md`; for a Vertex AI model, `docs/vertex-setup.md`;
+for a Google Cloud deployment, `deploy/README.md`. A draft announcement and funding appeal is in `docs/announcement-draft.md`.
 
 ## How a problem moves through the pipeline
 
@@ -88,6 +90,10 @@ node src/api/server.ts
 
 # All of the above, every day, automatically: see docs/automation.md
 scripts/daily.sh
+
+# The one-off backlog of a freshly loaded database (run both, side by side, and leave them; both are restartable):
+ENV_FILE=~/leekcf-env/staging.env caffeinate -i scripts/scrape-all.sh      # scrapes every problem, ~16 per minute
+ENV_FILE=~/leekcf-env/staging.env caffeinate -i scripts/backfill.sh        # tutorials + hints as problems arrive; stops by itself
 
 # Remove problems and contests that were added to config/IGNORE_THESE_CONTESTS
 node src/core/database/deleteProblem.ts

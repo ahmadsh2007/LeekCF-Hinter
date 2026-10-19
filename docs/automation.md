@@ -16,6 +16,20 @@ anything: `PIPELINE_DRY_RUN=1 scripts/daily.sh` prints the commands.
 Settings are environment variables (`SCRAPE_LIMIT`, `TUTORIAL_CONTEST_LIMIT`, `HINT_LIMIT`,
 `INCLUDE_WITHOUT_TUTORIAL`, and the model settings in the README). Point it at a project with `ENV_FILE=...`.
 
+## The one-off backlog
+
+A freshly loaded database has thousands of problems to scrape and hint, far more than one daily pass. Use two restartable
+scripts instead, side by side:
+
+- `scripts/scrape-all.sh` scrapes every waiting problem, 1000 at a time (about 16 problems a minute), and stops by itself
+  if Codeforces starts blocking.
+- `scripts/backfill.sh` repeats the protector, the tutorial finder and the hint generator as problems arrive, waits out model
+  rate limits, and finishes by itself. Hints for problems without a tutorial are switched on only once scraping is over and the
+  finder has nothing left to check.
+
+Both survive short database outages (502s, dropped connections) by retrying, and both can be stopped and started again at any
+time because all progress is in the database. Afterwards `scripts/daily.sh` keeps up with new contests.
+
 ## Where to run it
 
 Codeforces sits behind Cloudflare, which tends to accept home connections and may refuse the IP addresses of cloud
