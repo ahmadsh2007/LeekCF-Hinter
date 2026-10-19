@@ -146,7 +146,7 @@ export function createRouter(deps: RouterDeps) {
   return async function route(request: ApiRequest): Promise<ApiResponse> {
     const startedAt = now()
     const { route: routeName, response } = await handle(request)
-    log({ severity: 'INFO', message: 'request', route: routeName, method: request.method, status: response.status, durationMs: now() - startedAt })
+    log({ severity: 'INFO', message: 'request', route: routeName, method: request.method, status: response.status, durationMs: now() - startedAt, client: request.client ?? 'unknown' })
     return request.method.toUpperCase() === 'HEAD' ? { ...response, body: '' } : response
   }
 }

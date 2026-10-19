@@ -51,6 +51,11 @@ export function buildOpenApiDocument(publicBaseUrl: string): Record<string, unkn
               description: 'The problem letter, with a digit for split problems (A, B1, D2). Case-insensitive.',
               schema: { type: 'string', pattern: '^[A-Za-z][0-9]{0,2}$' }, example: 'C',
             },
+            {
+              name: 'X-Client', in: 'header', required: false,
+              description: 'Optional but appreciated: the name of your app, e.g. "my-extension/1.0". It is used only for anonymous usage statistics per app (no addresses are stored).',
+              schema: { type: 'string', maxLength: 60 }, example: 'my-extension/1.0',
+            },
           ],
           responses: {
             '200': {
@@ -68,6 +73,7 @@ export function buildOpenApiDocument(publicBaseUrl: string): Record<string, unkn
               headers: { 'Retry-After': { description: 'Seconds to wait before the next request.', schema: { type: 'integer' } } },
             },
             '503': errorResponse('The service is temporarily unavailable (unavailable). Try again shortly.'),
+            '500': errorResponse('Something unexpected went wrong on our side (internal). Please report it if it persists.'),
           },
         },
       },
@@ -123,7 +129,7 @@ export function buildOpenApiDocument(publicBaseUrl: string): Record<string, unkn
             error: {
               type: 'object',
               properties: {
-                code: { type: 'string', enum: ['invalid_problem', 'not_found', 'rate_limited', 'unavailable', 'method_not_allowed'] },
+                code: { type: 'string', enum: ['invalid_problem', 'not_found', 'rate_limited', 'unavailable', 'method_not_allowed', 'internal'] },
                 message: { type: 'string' },
               },
               required: ['code', 'message'],

@@ -5,6 +5,7 @@ import httpx
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from supabase.lib.client_options import SyncClientOptions
+from src.utils.resilientTransport import RetryingTransport
 
 # ENV_FILE points a run at another project (e.g. staging) without touching config/.env.
 envPath = Path(os.environ.get("ENV_FILE") or Path('.') / 'config' / '.env')
@@ -18,7 +19,8 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 print(f"Supabase target: {urlparse(SUPABASE_URL).hostname}")
 
-# Connection attempts that fail (e.g. "connection reset by peer") are retried a few times before an error surfaces;
-# the workers add their own retries and "try again later" handling on top (src/utils/retry.py).
-httpClient = httpx.Client(transport=httpx.HTTPTransport(retries=3), timeout=60.0)
+# A failed connection attempt is retried a few times by the transport itself, and RetryingTransport sends a request
+# again after a gateway error (502/503/504) or a dropped connection, so a short outage of the database never kills a
+# long run. The workers add their own "try again later" handling on top (src/utils/retry.py).
+httpClient = httpx.Client(transport=RetryingTransport(httpx.HTTPTransport(retries=3)), timeout=60.0)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY, options=SyncClientOptions(httpx_client=httpClient))

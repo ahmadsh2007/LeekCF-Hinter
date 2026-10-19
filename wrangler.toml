@@ -1,0 +1,22 @@
+# Cloudflare Workers deployment of the public API (see docs/launch.md).
+name = "leekcf-hinter-api"
+main = "src/api/adapters/worker.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true   # Workers Logs: the request log lines (route, status, app name; never addresses) in the dashboard
+
+[vars]
+# The address people will use, shown in the documentation. Change it after the first deploy.
+PUBLIC_BASE_URL = "https://leekcf-hinter-api.YOUR-SUBDOMAIN.workers.dev"
+
+# Set these two with `npx wrangler secret put NAME` (not here, so they never end up in git):
+#   SUPABASE_DATABASE_URL        the project URL
+#   SUPABASE_PUBLISHABLE_KEY     the publishable (anon) key, never the secret key (the Worker refuses that)
+
+# Optional: keep request statistics for months (Workers Logs keep only a few days). Create the dataset in the
+# dashboard (Workers -> Analytics Engine), then remove the '#' below.
+# [[analytics_engine_datasets]]
+# binding = "ANALYTICS"
+# dataset = "hinter_requests"

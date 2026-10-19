@@ -1,6 +1,7 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from 'node:http'
 import type { ApiRequest, ApiResponse } from './types.ts'
 import { clientIp } from './middlewares/clientIp.ts'
+import { clientLabel } from './middlewares/clientLabel.ts'
 
 // The only place that knows about node:http. Everything else works on plain request/response objects.
 export function createApp(route: (request: ApiRequest) => Promise<ApiResponse>): RequestListener {
@@ -12,6 +13,7 @@ export function createApp(route: (request: ApiRequest) => Promise<ApiResponse>):
         // Split by hand: new URL() would treat "//host/path" as a host.
         path: (req.url ?? '/').split('?')[0],
         ip: clientIp(Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor, req.socket.remoteAddress),
+        client: clientLabel({ get: (name) => { const value = req.headers[name]; return Array.isArray(value) ? value.join(',') : (value ?? null) } }),
       }
       const response = await route(request)
       res.writeHead(response.status, response.headers)

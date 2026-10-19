@@ -21,8 +21,9 @@ test('the document describes the hints endpoint with its parameters and every st
   assert.equal(doc.openapi, '3.1.0')
   assert.equal(doc.servers[0].url, 'https://hints.example.org')
   const operation = doc.paths['/v1/problems/{contestId}/{index}/hints'].get
-  assert.deepEqual(operation.parameters.map((p: any) => p.name), ['contestId', 'index'])
-  assert.ok(operation.parameters.every((p: any) => p.in === 'path' && p.required === true))
+  const pathParameters = operation.parameters.filter((p: any) => p.in === 'path')
+  assert.deepEqual(pathParameters.map((p: any) => p.name), ['contestId', 'index'])
+  assert.ok(pathParameters.every((p: any) => p.required === true))
   for (const status of ['200', '400', '404', '429', '503']) assert.ok(operation.responses[status], status)
   assert.ok(operation.responses['429'].headers['Retry-After'])
   assert.ok(doc.paths['/v1/health'].get)

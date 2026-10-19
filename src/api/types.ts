@@ -2,6 +2,7 @@ export interface ApiRequest {
   method: string
   path: string // the URL path without the query string
   ip: string
+  client?: string // a short label of the calling app (see middlewares/clientLabel.ts)
 }
 
 export interface ApiResponse {

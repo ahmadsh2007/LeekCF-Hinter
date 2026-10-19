@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeekCF Hinter API</title><style>
+:root { --bg:#ffffff; --fg:#1b1f24; --muted:#59636e; --line:#d8dee4; --code:#f4f6f8; --accent:#0b5fff; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f1318; --fg:#e6eaf0; --muted:#9aa4b0; --line:#2a323c; --code:#171d25; --accent:#6ea8ff; } }
+body { background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; margin:0; }
+main { max-width:52rem; margin:0 auto; padding:2rem 1rem 4rem; }
+h1 { font-size:1.8rem; margin:.2rem 0 .6rem; } h2 { margin-top:2.2rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+code, pre { background:var(--code); border-radius:6px; font:14px ui-monospace, monospace; }
+code { padding:.1rem .3rem; } pre { padding:.8rem 1rem; overflow-x:auto; }
+table { border-collapse:collapse; width:100%; } th, td { text-align:left; border-bottom:1px solid var(--line); padding:.4rem .5rem; vertical-align:top; }
+.muted { color:var(--muted); } .method { color:var(--accent); font-weight:600; }
+</style></head>
+<body><main>
+<h1>LeekCF Hinter API</h1>
+<p class="muted">Version 1.0.0 · base URL <code>http://localhost:8788</code> · <a href="/v1/openapi.json">OpenAPI document</a></p>
+<p>Progressive hints (2 to 5 per problem, gentlest first) for Codeforces problems. Free, read-only, no API key. Hints are served only after a contest has ended, plus a 2-hour margin for system tests, so they never spoil a running round. Problem statements and editorials are not served here: use the problem link on codeforces.com. The hints are written by an AI model from the statement and, when one exists, the official editorial. They can be wrong, so check them against the editorial. Each client address may make about 60 requests per minute (HTTP 429 with Retry-After beyond that). Answers are cacheable; please cache them on your side.</p>
+
+<h2><span class="method">GET</span> <code>/v1/problems/{contestId}/{index}/hints</code></h2>
+<p><strong>Get the hints of one problem</strong></p>
+<p>Returns every hint level of the problem, gentlest first. Reveal them one at a time in your interface so the reader is not spoiled by accident. A problem Codeforces lists in two divisions resolves to the same hints (see duplicateOf).</p>
+<table><tr><th>Parameter</th><th>Description</th><th>Example</th></tr><tr><td><code>contestId</code></td><td>The Codeforces contest id.</td><td><code>1944</code></td></tr><tr><td><code>index</code></td><td>The problem letter, with a digit for split problems (A, B1, D2). Case-insensitive.</td><td><code>C</code></td></tr><tr><td><code>X-Client</code></td><td>Optional but appreciated: the name of your app, e.g. &quot;my-extension/1.0&quot;. It is used only for anonymous usage statistics per app (no addresses are stored).</td><td><code>my-extension/1.0</code></td></tr></table>
+<p>Try it:</p>
+<pre>curl http://localhost:8788/v1/problems/1944/C/hints</pre>
+<p>Response <code>200</code>:</p><pre>{
+  &quot;problem&quot;: {
+    &quot;id&quot;: &quot;1944_C&quot;,
+    &quot;contestId&quot;: 1944,
+    &quot;index&quot;: &quot;C&quot;,
+    &quot;name&quot;: &quot;MEX Game 1&quot;,
+    &quot;rating&quot;: 1500,
+    &quot;tags&quot;: [
+      &quot;games&quot;,
+      &quot;greedy&quot;
+    ]
+  },
+  &quot;duplicateOf&quot;: &quot;1943_A&quot;,
+  &quot;hints&quot;: [
+    {
+      &quot;level&quot;: 1,
+      &quot;content&quot;: &quot;Think about which numbers Alice can always keep, whatever Bob removes.&quot;
+    },
+    {
+      &quot;level&quot;: 2,
+      &quot;content&quot;: &quot;A value that appears at least twice can never be taken away from Alice completely.&quot;
+    },
+    {
+      &quot;level&quot;: 3,
+      &quot;content&quot;: &quot;Only values that appear once matter. Look at the smallest values with count $0$ and $1$.&quot;
+    }
+  ],
+  &quot;groundedInTutorial&quot;: true,
+  &quot;generatedAt&quot;: &quot;2026-10-19T12:00:00+00:00&quot;
+}</pre>
+<table><tr><th>Status</th><th>Meaning</th></tr><tr><td><code>200</code></td><td>The hints.</td></tr><tr><td><code>400</code></td><td>The contest id or index is not a plausible Codeforces problem id (invalid_problem).</td></tr><tr><td><code>404</code></td><td>No hints are available for this problem (not_found). The same answer is given whether the problem is unknown, not processed yet, or its contest is not over, so try again later.</td></tr><tr><td><code>429</code></td><td>Too many requests (rate_limited). Wait Retry-After seconds.</td></tr><tr><td><code>500</code></td><td>Something unexpected went wrong on our side (internal). Please report it if it persists.</td></tr><tr><td><code>503</code></td><td>The service is temporarily unavailable (unavailable). Try again shortly.</td></tr></table>
+
+<h2><span class="method">GET</span> <code>/v1/health</code></h2>
+<p><strong>Liveness check</strong></p>
+
+
+<p>Try it:</p>
+<pre>curl http://localhost:8788/v1/health</pre>
+<p>Response <code>200</code>:</p><pre>{
+  &quot;status&quot;: &quot;ok&quot;
+}</pre>
+<table><tr><th>Status</th><th>Meaning</th></tr><tr><td><code>200</code></td><td>The service is up.</td></tr></table>
+<h2>Errors</h2>
+<p>Errors are JSON: <code>{"error": {"code": "...", "message": "..."}}</code>. Codes: <code>invalid_problem</code>, <code>not_found</code>, <code>rate_limited</code>, <code>unavailable</code>, <code>method_not_allowed</code>, <code>internal</code>.</p>
+<h2>Being a good client</h2>
+<ul>
+<li>Stay under the rate limit (HTTP 429 carries a <code>Retry-After</code> header) and cache answers; hints rarely change.</li>
+<li>Show hints one at a time so readers are not spoiled by accident.</li>
+<li>Link back to the problem on codeforces.com; this API does not serve statements or editorials.</li>
+</ul>
+</main></body></html>
