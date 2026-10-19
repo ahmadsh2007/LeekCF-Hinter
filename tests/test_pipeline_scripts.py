@@ -96,6 +96,63 @@ class RealRunTests(unittest.TestCase):
         self.assertEqual(len(calls), 5)
 
 
+class ScrapeAllTests(unittest.TestCase):
+    """scripts/scrape-all.sh repeats the scraper until nothing is left, or until a batch scrapes nothing."""
+
+    def runWithOutputs(self, outputs, **env):
+        with tempfile.TemporaryDirectory() as directory:
+            counter, log = Path(directory) / "counter", Path(directory) / "calls.log"
+            counter.write_text("0")
+            replies = Path(directory) / "replies"
+            replies.write_text("\n".join(outputs))
+            program = Path(directory) / "py"
+            program.write_text(
+                "#!/bin/sh\n"
+                f'echo "$*" >> "{log}"\n'
+                f'n=$(($(cat "{counter}") + 1)); echo $n > "{counter}"\n'
+                f'sed -n "${{n}}p" "{replies}"\n'
+            )
+            program.chmod(program.stat().st_mode | stat.S_IEXEC)
+            completed = subprocess.run(
+                ["bash", "scripts/scrape-all.sh"], cwd=ROOT, capture_output=True, text=True, timeout=20,
+                env={"PATH": os.environ["PATH"], "PYTHON": str(program), **env},
+            )
+            return completed, log.read_text().splitlines() if log.exists() else []
+
+    def test_repeats_until_no_problem_is_left(self):
+        completed, calls = self.runWithOutputs([
+            "Done. Scraped: 1000, failed: 3, will retry: 0.",
+            "Done. Scraped: 40, failed: 0, will retry: 1.",
+            "No problems found with status 'DISCOVERED'.",
+        ])
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(len(calls), 3)
+        self.assertIn("ALL DONE", completed.stdout)
+
+    def test_stops_when_a_batch_scrapes_nothing_because_that_means_being_blocked(self):
+        completed, calls = self.runWithOutputs([
+            "Done. Scraped: 500, failed: 0, will retry: 0.",
+            "Done. Scraped: 0, failed: 0, will retry: 5.",
+            "Done. Scraped: 500, failed: 0, will retry: 0.",
+        ])
+        self.assertEqual(len(calls), 2)
+        self.assertIn("scraped nothing", completed.stdout)
+
+    def test_passes_the_batch_size_and_the_polite_delay(self):
+        _, calls = self.runWithOutputs(["No problems found with status 'DISCOVERED'."])
+        self.assertIn("mainChecker --limit 1000 --delay 2", calls[0])
+
+    def test_a_crash_of_the_scraper_stops_the_loop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            program = Path(directory) / "py"
+            program.write_text("#!/bin/sh\nexit 3\n")
+            program.chmod(program.stat().st_mode | stat.S_IEXEC)
+            completed = subprocess.run(["bash", "scripts/scrape-all.sh"], cwd=ROOT, capture_output=True, text=True, timeout=20,
+                                       env={"PATH": os.environ["PATH"], "PYTHON": str(program)})
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("exited with 3", completed.stdout)
+
+
 class PipelineScriptTests(unittest.TestCase):
     def test_the_container_pipeline_runs_the_python_stages_in_order(self):
         commands = dryRun("deploy/run-pipeline.sh", PYTHON="python")
