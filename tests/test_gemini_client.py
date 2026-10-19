@@ -2,6 +2,7 @@ import unittest
 
 import requests
 
+from src.services.llm.errors import DailyQuotaExhaustedError
 from src.services.llm.geminiClient import (
     GeminiClient,
     LlmBlockedError,
@@ -216,6 +217,53 @@ class RateLimitRetryTests(unittest.TestCase):
         self.assertEqual(sleeps, [])
 
 
+def quotaError(quotaId, retryDelay="50421s", status=429):
+    details = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{"quotaMetric": "x", "quotaId": quotaId, "quotaValue": "20"}]}]
+    if retryDelay:
+        details.append({"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retryDelay})
+    return FakeResponse(status, {"error": {"code": status, "message": "You exceeded your current quota", "status": "RESOURCE_EXHAUSTED", "details": details}})
+
+
+class DailyQuotaTests(unittest.TestCase):
+    def test_a_used_up_daily_quota_is_reported_at_once_without_waiting_and_says_when_it_resets(self):
+        client, _ = clientAnswering(quotaError("GenerateRequestsPerDayPerProjectPerModel-FreeTier"))
+        with self.assertRaises(DailyQuotaExhaustedError) as caught:
+            client.generate("s", "u", SCHEMA)
+        self.assertEqual(client.sleeps, [])
+        self.assertEqual(caught.exception.retryAfterSeconds, 50421)
+        self.assertIsInstance(caught.exception, TransientLlmError)  # callers that only know "transient" still cope
+
+    def test_a_per_minute_limit_is_still_waited_out(self):
+        client, _ = clientAnswering(quotaError("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", retryDelay="12s"))
+        with self.assertRaises(TransientLlmError) as caught:
+            client.generate("s", "u", SCHEMA)
+        self.assertNotIsInstance(caught.exception, DailyQuotaExhaustedError)
+        self.assertEqual(client.sleeps, [20, 40, 80])
+
+    def test_a_429_without_details_is_waited_out_as_before(self):
+        client, _ = clientAnswering(FakeResponse(429, {"error": {"message": "slow down"}}))
+        with self.assertRaises(TransientLlmError):
+            client.generate("s", "u", SCHEMA)
+        self.assertEqual(client.sleeps, [20, 40, 80])
+
+    def test_a_daily_quota_that_appears_on_a_retry_stops_the_waiting(self):
+        sleeps = []
+        responses = iter([FakeResponse(503, {}), quotaError("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "7200s")])
+        class Seq:
+            def post(self, *a, **k):
+                return next(responses)
+        client = GeminiClient("k", "m", session=Seq(), sleep=sleeps.append)
+        with self.assertRaises(DailyQuotaExhaustedError) as caught:
+            client.generate("s", "u", SCHEMA)
+        self.assertEqual((sleeps, caught.exception.retryAfterSeconds), ([20], 7200))
+
+    def test_a_missing_reset_time_falls_back_to_a_few_hours(self):
+        client, _ = clientAnswering(quotaError("GenerateRequestsPerDayPerProjectPerModel-FreeTier", retryDelay=None))
+        with self.assertRaises(DailyQuotaExhaustedError) as caught:
+            client.generate("s", "u", SCHEMA)
+        self.assertGreaterEqual(caught.exception.retryAfterSeconds, 3600)
+
+
 class EnvironmentTests(unittest.TestCase):
     def test_builds_a_client_from_the_two_variables(self):
         client = clientFromEnvironment({"GEMINI_API_KEY": "k", "GEMINI_MODEL": "m"})
@@ -228,6 +276,16 @@ class EnvironmentTests(unittest.TestCase):
         with self.assertRaises(LlmConfigurationError) as noModel:
             clientFromEnvironment({"GEMINI_API_KEY": "k"})
         self.assertIn("GEMINI_MODEL", str(noModel.exception))
+
+    def test_several_models_in_a_list_make_a_pool_in_order_of_preference(self):
+        from src.services.llm.modelPool import GeminiModelPool
+        pool = clientFromEnvironment({"GEMINI_API_KEY": "k", "GEMINI_MODEL": "best, cheaper ,", "GEMINI_THINKING_LEVEL": "high"})
+        self.assertIsInstance(pool, GeminiModelPool)
+        self.assertEqual([c.model for c in pool.clients], ["best", "cheaper"])
+        self.assertEqual([c.thinkingLevel for c in pool.clients], ["high", "high"])
+
+    def test_a_single_model_stays_a_plain_client(self):
+        self.assertIsInstance(clientFromEnvironment({"GEMINI_API_KEY": "k", "GEMINI_MODEL": "only"}), GeminiClient)
 
     def test_the_thinking_level_comes_from_the_environment_when_set(self):
         client = clientFromEnvironment({"GEMINI_API_KEY": "k", "GEMINI_MODEL": "m", "GEMINI_THINKING_LEVEL": "high"})

@@ -1,7 +1,10 @@
 import os
+import re
 import time
 import requests
+from src.services.llm.modelPool import GeminiModelPool
 from src.services.llm.errors import (  # re-exported: callers import the errors from here
+    DailyQuotaExhaustedError,
     LlmBlockedError,
     LlmConfigurationError,
     LlmError,
@@ -18,6 +21,7 @@ THINKING_LEVELS = ("low", "medium", "high")
 # A per-minute limit or an overloaded model usually clears within a minute: wait and retry before giving up.
 RETRY_WAITS_SECONDS = (20, 40, 80)
 RETRYABLE_STATUSES = (429, 503)
+DEFAULT_DAILY_QUOTA_RESET_SECONDS = 4 * 3600  # used when Google does not say when the quota resets
 BLOCKED_FINISH_REASONS = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY"}
 
 def toGeminiSchema(schema):
@@ -63,11 +67,13 @@ class GeminiClient:
         }
 
         response = self.post(body)
+        self.raiseIfDailyQuotaUsedUp(response)
         for wait in RETRY_WAITS_SECONDS:
             if response.status_code not in RETRYABLE_STATUSES:
                 break
             self.sleep(wait)
             response = self.post(body)
+            self.raiseIfDailyQuotaUsedUp(response)
 
         if response.status_code == 429 or response.status_code >= 500:
             raise TransientLlmError(f"Gemini API answered HTTP {response.status_code}")
@@ -79,6 +85,26 @@ class GeminiClient:
         except ValueError as e:
             raise TransientLlmError("Gemini API answered with something that is not JSON") from e
         return self.extractText(data)
+
+    def raiseIfDailyQuotaUsedUp(self, response) -> None:
+        """A per-day quota will not clear within minutes, so waiting and retrying would only waste time."""
+        if response.status_code != 429:
+            return
+        try:
+            error = response.json()["error"]
+            details = error.get("details") or []
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return
+        usedUp = any("PerDay" in str(violation.get("quotaId", ""))
+                     for detail in details for violation in detail.get("violations", []))
+        if not usedUp:
+            return
+        retryAfter = DEFAULT_DAILY_QUOTA_RESET_SECONDS
+        for detail in details:
+            match = re.fullmatch(r"(\d+(?:\.\d+)?)s", str(detail.get("retryDelay", "")))
+            if match:
+                retryAfter = float(match.group(1))
+        raise DailyQuotaExhaustedError(f"The daily free-tier quota of {self.model} is used up", retryAfter)
 
     def endpoint(self) -> str:
         return f"{API_ROOT}/{self.model}:generateContent"
@@ -140,4 +166,8 @@ def clientFromEnvironment(environ=None) -> GeminiClient:
             "https://ai.google.dev/gemini-api/docs/models and set GEMINI_MODEL to its id."
         )
     thinkingLevel = (environ.get("GEMINI_THINKING_LEVEL") or "").strip().lower() or None
-    return GeminiClient(apiKey, model, thinkingLevel=thinkingLevel)
+    models = [name.strip() for name in model.split(",") if name.strip()]
+    clients = [GeminiClient(apiKey, name, thinkingLevel=thinkingLevel) for name in models]
+    # Several models: a pool in order of preference. Each free-tier model has its own small daily quota, so when the
+    # best one is used up the next one carries on (see modelPool.py).
+    return clients[0] if len(clients) == 1 else GeminiModelPool(clients)

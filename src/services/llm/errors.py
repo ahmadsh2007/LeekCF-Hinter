@@ -4,6 +4,12 @@ class LlmError(Exception):
 class TransientLlmError(LlmError):
     """Rate limit, server trouble or an empty answer: trying again later may work."""
 
+class DailyQuotaExhaustedError(TransientLlmError):
+    """A free-tier model has used up today's requests. Retrying soon is pointless; `retryAfterSeconds` says when it resets."""
+    def __init__(self, message: str, retryAfterSeconds: float):
+        super().__init__(message)
+        self.retryAfterSeconds = retryAfterSeconds
+
 class LlmRequestError(LlmError):
     """The API rejected the request itself (bad key, no credit, unknown model, malformed request). Every call will fail."""
 
