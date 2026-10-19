@@ -65,7 +65,12 @@ fund for the next round of hints and is not spent on anything else.
 - Problems without an official editorial get hints written without one, which are less reliable.
 - There is no browser extension yet. The API is open so anyone can build one.
 
+### Open source
+
+The code is open source under the [Apache License 2.0](LICENSE): use it, copy it, change it, build on it, including
+commercially. The one condition is credit: keep the copyright notice and the `NOTICE` file, which names the author.
+
 ### Credits
 
 Problems and editorials belong to their authors and to Codeforces; Hinter links back to every problem and serves only
-the hints. [Add the code repository link and licence.]
+the hints. Code: https://github.com/ahmadsh2007/LeekCF-Hinter (Apache-2.0). Created by ahmadsh2007.

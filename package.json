@@ -1,5 +1,11 @@
 {
   "type": "module",
+  "license": "Apache-2.0",
+  "author": "ahmadsh2007 (https://github.com/ahmadsh2007)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahmadsh2007/LeekCF-Hinter.git"
+  },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",

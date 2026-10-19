@@ -43,6 +43,22 @@ runs in Cloudflare's real Workers runtime on a laptop (`wrangler dev`), reads th
 key, and the public key can read nothing but that view. **Not verified:** the actual `wrangler deploy` to your account,
 Cloudflare's edge cache and Analytics Engine behaviour in production. Run the two curl checks above after deploying.
 
+## Which Supabase project is the public one
+
+The project that holds the data is the public one. Nothing needs copying: the finished database (schema, problems, tutorials,
+hints, the locked-down `public_hints` view) is where the pipeline has been writing. The Worker is pointed at it with
+`SUPABASE_DATABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (step 3 above).
+
+**Give it a name you will not delete by accident.** In the Supabase dashboard open the project, go to *Project Settings →
+General* (the same page that holds "Delete project") and change the project name to something distinctive such as
+`LeekCF-Hinter-PRODUCTION-do-not-delete`. Per [Supabase's guide](https://supabase.com/docs/guides/platform/delete-project.md)
+deleting a project makes you type its exact name, so a long, odd name is a real speed bump, and deleting it also makes its
+backups and keys unusable. The project reference in the address should not change when you rename it; check that the
+address in the browser and in `~/leekcf-env/staging.env` still works afterwards (any `curl` of the API, or ask for a check).
+
+**Keep your own copy of the data.** The hints cost days of model time to produce, and a deleted or lost project takes them
+with it. Do not rely only on Supabase: export the tables to files on your own disk from time to time.
+
 ## Before you announce it
 
 - **Run the pipeline on the production database**, not only the staging project (`docs/staging-runbook.md`, "Production"),

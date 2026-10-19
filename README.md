@@ -1,9 +1,11 @@
 # LeekCF-Hinter
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 A pipeline that builds progressive, spoiler-safe hints for Codeforces problems and serves them through a public,
 read-only API. It syncs problems from the Codeforces API, scrapes each statement, finds duplicates (the same problem
-in Div. 1 and Div. 2), waits until a contest is over, finds the official tutorial, asks Claude for graded
-hints (2 to 5, depending on the problem), and serves them.
+in Div. 1 and Div. 2), waits until a contest is over, finds the official tutorial, asks an AI model (Gemini, Claude, ...) for
+graded hints (2 to 5, depending on the problem), and serves them.
 The full plan is in `Codeforces Hinter Architecture Blueprint copy.docx`; the designs are in `docs/superpowers/specs/`.
 To try everything on a throwaway Supabase project, follow `docs/staging-runbook.md`. To put the API online for free, see
 `docs/launch.md`; to run the pipeline automatically, `docs/automation.md`; for a Vertex AI model, `docs/vertex-setup.md`;
@@ -129,3 +131,22 @@ Offline: nothing touches Codeforces, Supabase or an LLM.
 venv/bin/python -m unittest discover -s tests
 node --test tests/*.test.ts
 ```
+
+## Contributing
+
+Pull requests, bug reports and ideas are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Good first projects: a browser
+extension that shows the hints on codeforces.com, more model providers, and a larger evaluation of how often the hints are right.
+
+## License and credit
+
+Free to use, copy, modify and build on, including commercially, under the [Apache License 2.0](LICENSE). The one thing it asks
+in return is credit: if you copy or redistribute this project or a work based on it, you must keep the copyright notice and the
+[NOTICE](NOTICE) file, which names the author, and say what you changed.
+
+Created by [@ahmadsh2007](https://github.com/ahmadsh2007).
+
+## Support the project
+
+Hinter is free to use and runs on free services, which is why it exists at all. Money would pay for better models (the hints are
+only as good as the model that writes them), hosting and a domain, in that order; the plan and the numbers are in
+[docs/funding.md](docs/funding.md). Sponsor links will be added here and on the repository's Sponsor button.

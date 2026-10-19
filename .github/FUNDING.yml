@@ -1,0 +1,8 @@
+# GitHub shows a "Sponsor" button on the repository once at least one entry below is filled in and valid.
+# Uncomment the platforms you have set up (docs/funding.md explains the options).
+# github: [ahmadsh2007]                 # needs GitHub Sponsors to be enabled for your account
+# open_collective: your-collective-slug
+# ko_fi: your-ko-fi-name
+# liberapay: your-liberapay-name
+# patreon: your-patreon-name
+# custom: ["https://your-donation-link.example"]
