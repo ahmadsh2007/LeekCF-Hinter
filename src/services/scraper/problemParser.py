@@ -80,32 +80,36 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
     notes = extractText(noteElement) if noteElement else None
 
     # --- 3. STRICTLY PARSE SAMPLE TESTS ---
-    sampleContainer = soup.select_one(".problem-statement .sample-tests .sample-test")
-    if not sampleContainer:
-        raise ScrapingValidationError("Sample tests container '.sample-test' not found in DOM.")
-
-    inputElems = sampleContainer.select(".input pre")
-    outputElems = sampleContainer.select(".output pre")
-
-    if not inputElems or not outputElems:
-        raise ScrapingValidationError("Could not find any '<pre>' tags inside sample inputs/outputs.")
-
-    if len(inputElems) != len(outputElems):
-        raise ScrapingValidationError(f"Mismatched samples: found {len(inputElems)} inputs and {len(outputElems)} outputs.")
-
+    # A few problems have no samples at all and no sample section (e.g. 1060H: "This problem has no sample tests").
+    # A sample section that exists must be complete.
     samples = []
-    for idx, (inElem, outElem) in enumerate(zip(inputElems, outputElems), start=1):
-        inText = inElem.get_text(separator="\n", strip=True)
-        outText = outElem.get_text(separator="\n", strip=True)
+    sampleSection = soup.select_one(".problem-statement .sample-tests")
+    if sampleSection is not None:
+        sampleContainer = sampleSection.select_one(".sample-test")
+        if not sampleContainer:
+            raise ScrapingValidationError("Sample tests container '.sample-test' not found in DOM.")
 
-        if inText == "" or outText == "":
-            raise ScrapingValidationError(f"Sample test #{idx} contains empty input or output text.")
+        inputElems = sampleContainer.select(".input pre")
+        outputElems = sampleContainer.select(".output pre")
 
-        samples.append({
-            "test_order": idx,
-            "input_text": inText,
-            "output_text": outText
-        })
+        if not inputElems or not outputElems:
+            raise ScrapingValidationError("Could not find any '<pre>' tags inside sample inputs/outputs.")
+
+        if len(inputElems) != len(outputElems):
+            raise ScrapingValidationError(f"Mismatched samples: found {len(inputElems)} inputs and {len(outputElems)} outputs.")
+
+        for idx, (inElem, outElem) in enumerate(zip(inputElems, outputElems), start=1):
+            inText = inElem.get_text(separator="\n", strip=True)
+            outText = outElem.get_text(separator="\n", strip=True)
+
+            if inText == "" or outText == "":
+                raise ScrapingValidationError(f"Sample test #{idx} contains empty input or output text.")
+
+            samples.append({
+                "test_order": idx,
+                "input_text": inText,
+                "output_text": outText
+            })
 
     specs = {
         "time_limit_ms": timeLimitMS,

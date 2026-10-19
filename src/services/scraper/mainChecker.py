@@ -69,7 +69,8 @@ def checkAndProcessProblem(client, limit: int = DEFAULT_LIMIT, delaySeconds: flo
 
             # Upsert both tables cleanly
             client.table("problem_specifications").upsert(specs).execute()
-            client.table("sample_tests").upsert(samples).execute()
+            if samples:  # a few problems have none, and an empty upsert would be a pointless request
+                client.table("sample_tests").upsert(samples).execute()
 
             # Update status ONLY after all data is safely stored
             client.table("problems").update({

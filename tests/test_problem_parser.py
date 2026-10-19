@@ -155,8 +155,14 @@ class ValidationFailureTests(unittest.TestCase):
         empty = '<div class="output-specification"> </div>'
         self.assertRejected(buildPage(outputSection=empty), "output_specification")
 
-    def test_missing_sample_container(self):
-        self.assertRejected(buildPage(samples=""), "Sample tests container")
+    def test_a_problem_may_have_no_sample_box_at_all(self):
+        # e.g. Codeforces 1060H says "This problem has no sample tests"
+        specs, samples = parse_problem_details_strictly(buildPage(samples=""))
+        self.assertEqual(samples, [])
+        self.assertTrue(specs["statement_text"])
+
+    def test_a_sample_section_without_any_sample_is_still_a_broken_page(self):
+        self.assertRejected(buildPage(samples='<div class="sample-tests"><div class="section-title">Examples</div></div>'), "Sample tests container")
 
     def test_sample_container_without_pre_tags(self):
         samples = '<div class="sample-tests"><div class="sample-test"></div></div>'

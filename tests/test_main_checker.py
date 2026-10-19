@@ -153,6 +153,14 @@ class SuccessTests(unittest.TestCase):
         samples = client.writesTo("sample_tests", "upsert")[0].payload
         self.assertEqual([sample["problem_id"] for sample in samples], ["1800_A"])
 
+    def test_a_problem_without_samples_is_scraped_without_writing_an_empty_samples_request(self):
+        client = FakeClient(problemRows(1))
+        counts, _ = runBatch(client, scripted([buildPage(samples="")]))
+        self.assertEqual(counts["scraped"], 1)
+        self.assertEqual(client.writesTo("sample_tests", "upsert"), [])
+        self.assertEqual(len(client.writesTo("problem_specifications", "upsert")), 1)
+        self.assertEqual(client.statusUpdates()[0][1]["stage_status"], "SCRAPED_WAITING_FOR_CONTEST")
+
     def test_marks_scraped_and_clears_any_previous_error(self):
         client = FakeClient(problemRows(1))
         runBatch(client, scripted([buildPage()]))

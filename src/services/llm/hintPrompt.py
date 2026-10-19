@@ -77,6 +77,8 @@ def buildUserPrompt(problem: ProblemForHints, feedback: str | None = None) -> st
             sections.append(optional)
 
     sections.append("## Sample tests")
+    if not problem.samples:
+        sections.append("This problem has no sample tests.")
     for number, (sampleInput, sampleOutput) in enumerate(problem.samples, start=1):
         sections.append(f"### Sample {number}\nInput:\n```\n{sampleInput}\n```\nOutput:\n```\n{sampleOutput}\n```")
 

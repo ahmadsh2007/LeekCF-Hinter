@@ -114,6 +114,11 @@ class UserPromptTests(unittest.TestCase):
         self.assertNotIn("None", prompt)
         self.assertNotIn("\n\n\n\n", prompt)
 
+    def test_a_problem_without_samples_says_so(self):
+        prompt = buildUserPrompt(sampleProblem(samples=[]))
+        self.assertIn("no sample tests", prompt.lower())
+        self.assertNotIn("Sample 1", prompt)
+
     def test_missing_notes_are_left_out(self):
         self.assertNotIn("In the first test", buildUserPrompt(sampleProblem(notes=None)))
 
