@@ -30,7 +30,10 @@ Not built: the browser extension. Hints are never generated for, or served from,
 - `python -m venv venv && venv/bin/pip install -r requirements.txt`
 - `config/.env` (not committed) needs `SUPABASE_DATABASE_URL` and `SUPABASE_DATABASE_SECRET_KEY`. The hint
   generator also needs `ANTHROPIC_API_KEY`; it uses Claude Opus 5.5 at high effort unless `ANTHROPIC_MODEL` /
-  `ANTHROPIC_EFFORT` say otherwise (`LLM_PROVIDER=gemini` with `GEMINI_API_KEY` and `GEMINI_MODEL` still works). What it costs:
+  `ANTHROPIC_EFFORT` say otherwise. `LLM_PROVIDER` can also be `gemini` (Google AI Studio: `GEMINI_API_KEY`, `GEMINI_MODEL`, optional
+  `GEMINI_THINKING_LEVEL`) or `vertex` (Gemini 4 Argon on Vertex AI: `VERTEX_PROJECT`, `GOOGLE_APPLICATION_CREDENTIALS`; see
+  `docs/vertex-setup.md`), or a comma-separated chain such as `vertex,gemini` that moves on to the next model for good when
+  the first one stops working (e.g. the free credit is used up). What it costs:
   `docs/cost-estimate.md`. The public API uses `SUPABASE_PUBLISHABLE_KEY` instead and refuses a secret key.
 - `config/IGNORE_THESE_CONTESTS` lists contest ids that are never added to the database.
 - To point any script at another project (e.g. a staging Supabase project) without touching `config/.env`, set

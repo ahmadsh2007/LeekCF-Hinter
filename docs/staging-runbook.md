@@ -9,10 +9,14 @@ Keep its keys in a file **outside** the repository, e.g. `~/leekcf-env/staging.e
 SUPABASE_DATABASE_URL=https://YOUR-PROJECT-REF.supabase.co
 SUPABASE_DATABASE_SECRET_KEY=sb_secret_...
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-ANTHROPIC_API_KEY=sk-ant-...
+# the model that writes the hints (pick one setup):
+LLM_PROVIDER=vertex,gemini           # Gemini 4 Argon on Vertex first, free Gemini Flash after it (docs/vertex-setup.md)
+VERTEX_PROJECT=your-google-cloud-project-id
+GOOGLE_APPLICATION_CREDENTIALS=/Users/YOU/leekcf-env/gcp-key.json
+GEMINI_API_KEY=...                    # free key from Google AI Studio
+GEMINI_MODEL=gemini-3.8-flash
+# or: LLM_PROVIDER=anthropic with ANTHROPIC_API_KEY=sk-ant-... (Claude Opus 5.5, high effort, is its default)
 ```
-
-(Claude Opus 5.5 at high effort is the default; add `ANTHROPIC_MODEL=` / `ANTHROPIC_EFFORT=` to change that.)
 
 Every command below starts with `ENV_FILE=~/leekcf-env/staging.env`, which points the script at that project instead of
 `config/.env`. Each script prints `Supabase target: <host>` first so you can see where it is about to write.
