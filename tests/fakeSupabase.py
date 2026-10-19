@@ -12,6 +12,7 @@ class FakeQuery:
         self.eqFilters = []
         self.inFilters = []
         self.containsFilters = []
+        self.gtFilters = []
         self.orderColumn = None
         self.rangeBounds = None
         self.onConflict = None
@@ -26,6 +27,10 @@ class FakeQuery:
 
     def in_(self, column, values):
         self.inFilters.append((column, list(values)))
+        return self
+
+    def gt(self, column, value):
+        self.gtFilters.append((column, value))
         return self
 
     def contains(self, column, values):
@@ -59,6 +64,7 @@ class FakeQuery:
         return (
             all(row.get(column) == value for column, value in self.eqFilters)
             and all(row.get(column) in values for column, values in self.inFilters)
+            and all(row.get(column) is not None and row.get(column) > value for column, value in self.gtFilters)
             and all(all(value in (row.get(column) or []) for value in values) for column, values in self.containsFilters)
         )
 

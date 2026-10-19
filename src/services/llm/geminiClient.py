@@ -7,6 +7,18 @@ TEMPERATURE = 0.4
 # Reasons for which the model refused or cut the answer for content reasons.
 BLOCKED_FINISH_REASONS = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY"}
 
+def toGeminiSchema(schema):
+    """Gemini's responseSchema is an OpenAPI subset: upper-case type names and no additionalProperties."""
+    if isinstance(schema, dict):
+        return {
+            key: (value.upper() if key == "type" and isinstance(value, str) else toGeminiSchema(value))
+            for key, value in schema.items()
+            if key != "additionalProperties"
+        }
+    if isinstance(schema, list):
+        return [toGeminiSchema(item) for item in schema]
+    return schema
+
 class LlmError(Exception):
     pass
 
@@ -36,7 +48,7 @@ class GeminiClient:
             "generationConfig": {
                 "temperature": TEMPERATURE,
                 "responseMimeType": "application/json",
-                "responseSchema": responseSchema,
+                "responseSchema": toGeminiSchema(responseSchema),
             },
         }
         try:

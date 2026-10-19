@@ -111,13 +111,17 @@ def generateValidHints(llm, problem: ProblemForHints) -> list[Hint]:
     raise HintValidationError(feedback)
 
 def saveHints(client, row: dict, hints: list[Hint], model: str, grounded: bool) -> None:
-    """The five hints go in one request (all or nothing); the status changes last."""
+    """
+    The hints go in one request (all or nothing). Levels above the new count are then removed, so regenerating a
+    problem with fewer hints cannot leave old ones behind to be served. The status changes last.
+    """
     rows = [
         {"problem_id": row["id"], "hint_level": hint.level, "content": hint.content, "llm_model_used": model,
          "prompt_version": PROMPT_VERSION, "grounded_in_tutorial": grounded, "created_at": "now()"}
         for hint in hints
     ]
     client.table("hints").upsert(rows, on_conflict="problem_id,hint_level").execute()
+    client.table("hints").delete().eq("problem_id", row["id"]).gt("hint_level", len(hints)).execute()
     (
         client.table("problems")
         .update({"stage_status": DONE_STATUS, "last_error": None, "updated_at": "now()"})
@@ -199,7 +203,7 @@ def run(client, llm, limit: int = DEFAULT_LIMIT, includeWithoutTutorial: bool = 
     return counts
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate five graded hints for problems that are ready.")
+    parser = argparse.ArgumentParser(description="Generate graded hints (2 to 5, depending on the problem) for problems that are ready.")
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help=f"Maximum problems this run (default {DEFAULT_LIMIT}); each costs model calls.")
     parser.add_argument("--dry-run", action="store_true", help="Call the model and print the hints, but write nothing.")
     parser.add_argument("--problem", help="Only this problem id, e.g. 1943_A.")

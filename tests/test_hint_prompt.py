@@ -25,10 +25,14 @@ def sampleProblem(**overrides) -> ProblemForHints:
 
 
 class SystemPromptTests(unittest.TestCase):
-    def test_describes_all_five_levels_and_the_spoiler_rule(self):
-        for fragment in ("Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "observation", "algorithm"):
+    def test_lets_the_model_choose_between_two_and_five_hints_guided_by_the_rating(self):
+        for fragment in ("from 2 to 5", "rating", "unrated"):
             self.assertIn(fragment, SYSTEM_PROMPT)
-        self.assertIn("before level 3", SYSTEM_PROMPT)
+
+    def test_describes_how_the_hints_escalate_and_the_spoiler_rule(self):
+        for fragment in ("Hint 1", "observation", "last hint", "complete solution", "algorithm", "data structure"):
+            self.assertIn(fragment, SYSTEM_PROMPT)
+        self.assertIn("before hint 3", SYSTEM_PROMPT)
 
     def test_forbids_code_and_asks_for_dollar_latex(self):
         self.assertIn("Never write code", SYSTEM_PROMPT)
@@ -36,16 +40,38 @@ class SystemPromptTests(unittest.TestCase):
 
     def test_version_is_a_non_empty_label(self):
         self.assertTrue(PROMPT_VERSION)
+        self.assertNotEqual(PROMPT_VERSION, "v1")  # the prompt changed: stored hints must say which one wrote them
+
+
+def keysOf(schema):
+    found = set()
+    if isinstance(schema, dict):
+        for key, value in schema.items():
+            found.add(key)
+            found |= keysOf(value)
+    elif isinstance(schema, list):
+        for item in schema:
+            found |= keysOf(item)
+    return found
 
 
 class SchemaTests(unittest.TestCase):
     def test_schema_asks_for_a_list_of_level_and_text(self):
         hints = RESPONSE_SCHEMA["properties"]["hints"]
-        self.assertEqual(hints["type"], "ARRAY")
-        self.assertEqual(hints["items"]["properties"]["level"]["type"], "INTEGER")
-        self.assertEqual(hints["items"]["properties"]["text"]["type"], "STRING")
+        self.assertEqual(RESPONSE_SCHEMA["type"], "object")
+        self.assertEqual(hints["type"], "array")
+        self.assertEqual(hints["items"]["properties"]["level"]["type"], "integer")
+        self.assertEqual(hints["items"]["properties"]["text"]["type"], "string")
         self.assertEqual(sorted(hints["items"]["required"]), ["level", "text"])
         self.assertEqual(RESPONSE_SCHEMA["required"], ["hints"])
+
+    def test_objects_are_closed_as_structured_outputs_require(self):
+        self.assertIs(RESPONSE_SCHEMA["additionalProperties"], False)
+        self.assertIs(RESPONSE_SCHEMA["properties"]["hints"]["items"]["additionalProperties"], False)
+
+    def test_uses_no_keywords_the_providers_reject(self):
+        # Claude's structured outputs reject maxItems, minimum, maximum, minLength, maxLength; the count is checked by the validator.
+        self.assertFalse(keysOf(RESPONSE_SCHEMA) & {"maxItems", "minItems", "minimum", "maximum", "minLength", "maxLength"})
 
 
 class UserPromptTests(unittest.TestCase):

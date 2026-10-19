@@ -11,7 +11,17 @@ from src.services.llm.geminiClient import (
     clientFromEnvironment,
 )
 
-SCHEMA = {"type": "OBJECT", "properties": {}}
+SCHEMA = {
+    "type": "object",
+    "properties": {"hints": {"type": "array", "items": {"type": "object", "properties": {"level": {"type": "integer"}}, "additionalProperties": False}}},
+    "required": ["hints"],
+    "additionalProperties": False,
+}
+GEMINI_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {"hints": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"level": {"type": "INTEGER"}}}}},
+    "required": ["hints"],
+}
 
 
 class FakeResponse:
@@ -64,7 +74,8 @@ class RequestShapeTests(unittest.TestCase):
         self.assertEqual(body["systemInstruction"], {"parts": [{"text": "SYSTEM"}]})
         self.assertEqual(body["contents"], [{"role": "user", "parts": [{"text": "USER"}]}])
         self.assertEqual(body["generationConfig"]["responseMimeType"], "application/json")
-        self.assertEqual(body["generationConfig"]["responseSchema"], SCHEMA)
+        # Gemini's dialect: upper-case type names, and no additionalProperties
+        self.assertEqual(body["generationConfig"]["responseSchema"], GEMINI_SCHEMA)
         self.assertIn("temperature", body["generationConfig"])
 
     def test_model_name_is_exposed_for_the_database_record(self):

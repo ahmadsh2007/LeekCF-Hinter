@@ -4,7 +4,9 @@ import unittest
 from src.workers.hint_generator.hintValidator import (
     EARLY_LEVELS,
     MAX_HINT_CHARS,
+    MAX_HINTS,
     MIN_HINT_CHARS,
+    MIN_HINTS,
     Hint,
     HintValidationError,
     validateHints,
@@ -22,6 +24,36 @@ def withText(level: int, newText: str) -> str:
     texts = {n: text(f"level {n}") for n in range(1, 6)}
     texts[level] = newText
     return payload(texts)
+
+
+class VariableCountTests(unittest.TestCase):
+    def test_every_count_from_two_to_five_is_accepted_and_keeps_its_levels(self):
+        for count in range(2, 6):
+            hints = validateHints(payload(levels=list(range(1, count + 1))))
+            self.assertEqual([hint.level for hint in hints], list(range(1, count + 1)), count)
+
+    def test_in_a_two_hint_answer_the_last_hint_may_name_the_technique(self):
+        texts = {1: text("one"), 2: text("two") + " Use dynamic programming with a segment tree."}
+        self.assertEqual(len(validateHints(payload(texts, levels=[1, 2]))), 2)
+
+    def test_in_a_two_hint_answer_the_first_hint_still_may_not(self):
+        texts = {1: text("one") + " Think greedy.", 2: text("two")}
+        with self.assertRaises(HintValidationError) as caught:
+            validateHints(payload(texts, levels=[1, 2]))
+        self.assertIn("Hint 1", str(caught.exception))
+
+    def test_in_a_three_hint_answer_the_middle_hint_may_not_name_it_but_the_last_may(self):
+        middle = {1: text("one"), 2: text("two") + " Use binary search.", 3: text("three")}
+        with self.assertRaises(HintValidationError) as caught:
+            validateHints(payload(middle, levels=[1, 2, 3]))
+        self.assertIn("Hint 2", str(caught.exception))
+        last = {1: text("one"), 2: text("two"), 3: text("three") + " Use binary search."}
+        self.assertEqual(len(validateHints(payload(last, levels=[1, 2, 3]))), 3)
+
+    def test_in_a_four_hint_answer_hint_three_may_name_it(self):
+        texts = {n: text(f"level {n}") for n in range(1, 5)}
+        texts[3] += " Use a segment tree."
+        self.assertEqual(len(validateHints(payload(texts, levels=[1, 2, 3, 4]))), 4)
 
 
 class ValidPayloadTests(unittest.TestCase):
@@ -54,21 +86,27 @@ class ShapeTests(unittest.TestCase):
         self.assertRejected(json.dumps({"answer": []}), "hints")
         self.assertRejected(json.dumps([1, 2, 3]), "hints")
 
-    def test_wrong_number_of_hints(self):
-        self.assertRejected(payload(levels=[1, 2, 3, 4]), "exactly 5")
+    def test_the_number_of_hints_must_be_between_two_and_five(self):
+        self.assertEqual((MIN_HINTS, MAX_HINTS), (2, 5))
+        self.assertRejected(payload(levels=[1]), "between 2 and 5")
+        self.assertRejected(json.dumps({"hints": []}), "between 2 and 5")
         extra = json.loads(payload())
         extra["hints"].append({"level": 6, "text": text("six")})
-        self.assertRejected(json.dumps(extra), "exactly 5")
+        self.assertRejected(json.dumps(extra), "between 2 and 5")
 
     def test_repeated_or_missing_levels(self):
         raw = json.loads(payload())
         raw["hints"][4]["level"] = 4
-        self.assertRejected(json.dumps(raw), "levels 1 to 5")
+        self.assertRejected(json.dumps(raw), "numbered 1 to 5")
+
+    def test_levels_must_start_at_one_and_have_no_gaps(self):
+        self.assertRejected(payload(levels=[1, 2, 4]), "numbered 1 to 3")
+        self.assertRejected(payload(levels=[2, 3]), "numbered 1 to 2")
 
     def test_level_must_be_an_integer(self):
         raw = json.loads(payload())
         raw["hints"][0]["level"] = "1"
-        self.assertRejected(json.dumps(raw), "levels 1 to 5")
+        self.assertRejected(json.dumps(raw), "numbered 1 to 5")
 
     def test_text_must_be_a_string(self):
         raw = json.loads(payload())

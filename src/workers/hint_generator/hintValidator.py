@@ -2,8 +2,11 @@ import json
 import re
 from dataclasses import dataclass
 
-HINT_COUNT = 5
-EARLY_LEVELS = (1, 2)  # may only describe observations, never name a technique
+# The model decides how many hints a problem needs: few for a short idea, more for several distinct steps.
+MIN_HINTS = 2
+MAX_HINTS = 5
+# Hints 1 and 2 may not name a technique, unless the hint is the last one (the full walkthrough).
+EARLY_LEVELS = (1, 2)
 MIN_HINT_CHARS = 20
 MAX_HINT_CHARS = 4000
 
@@ -51,12 +54,13 @@ def validateHints(raw: str) -> list[Hint]:
         raise HintValidationError('The answer must be a JSON object with a "hints" list.')
 
     entries = data["hints"]
-    if len(entries) != HINT_COUNT:
-        raise HintValidationError(f"The answer must contain exactly {HINT_COUNT} hints, found {len(entries)}.")
+    count = len(entries)
+    if not MIN_HINTS <= count <= MAX_HINTS:
+        raise HintValidationError(f"The answer must contain between {MIN_HINTS} and {MAX_HINTS} hints, found {count}.")
 
     levels = [entry.get("level") if isinstance(entry, dict) else None for entry in entries]
-    if not all(isRealInt(level) for level in levels) or sorted(levels) != list(range(1, HINT_COUNT + 1)):
-        raise HintValidationError(f"The hints must be numbered with the levels 1 to {HINT_COUNT}, each used once.")
+    if not all(isRealInt(level) for level in levels) or sorted(levels) != list(range(1, count + 1)):
+        raise HintValidationError(f"The {count} hints must be numbered 1 to {count}, each used once.")
 
     hints = []
     for entry in sorted(entries, key=lambda item: item["level"]):
@@ -70,12 +74,12 @@ def validateHints(raw: str) -> list[Hint]:
             raise HintValidationError(f"Hint {level} is too long ({len(content)} characters, at most {MAX_HINT_CHARS}).")
         if "```" in content:
             raise HintValidationError(f"Hint {level} contains a code block; hints must not contain code.")
-        if level in EARLY_LEVELS:
+        if level in EARLY_LEVELS and level < count:
             found = EARLY_FORBIDDEN.search(content)
             if found:
                 raise HintValidationError(
-                    f"Hint {level} mentions '{found.group(0).lower()}', but no algorithm or data structure "
-                    "may be named before hint 3. Describe the observation without naming the technique."
+                    f"Hint {level} mentions '{found.group(0).lower()}', but only hint 3 onwards and the final "
+                    "walkthrough may name an algorithm or data structure. Describe the idea without naming the technique."
                 )
         hints.append(Hint(level=level, content=content))
     return hints

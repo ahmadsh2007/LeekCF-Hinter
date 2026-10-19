@@ -27,6 +27,12 @@ def goodAnswer(prefix="") -> str:
         for level in range(1, 6)
     ]})
 
+def answerWithHints(count: int) -> str:
+    return json.dumps({"hints": [
+        {"level": level, "text": f"Level {level}: a calm observation about the numbers in this problem."}
+        for level in range(1, count + 1)
+    ]})
+
 def badAnswer() -> str:
     answer = json.loads(goodAnswer())
     answer["hints"][0]["text"] = "Level 1: this is clearly a dynamic programming problem about the numbers."
@@ -105,11 +111,30 @@ class SuccessTests(unittest.TestCase):
         self.assertEqual(update.eqFilters, [("id", "1_A"), ("stage_status", "TUTORIAL_FOUND")])
         self.assertEqual(result["generated"], 1)
 
-    def test_hints_are_stored_before_the_status_changes(self):
+    def test_hints_are_stored_before_stale_levels_go_and_the_status_changes_last(self):
         client = world()
         go(client, FakeLlm())
-        order = [call.tableName for call in client.calls if call.operation in ("upsert", "update")]
-        self.assertEqual(order, ["hints", "problems"])
+        order = [(call.tableName, call.operation) for call in client.calls if call.operation in ("upsert", "update", "delete")]
+        self.assertEqual(order, [("hints", "upsert"), ("hints", "delete"), ("problems", "update")])
+
+    def test_a_problem_may_get_between_two_and_five_hints(self):
+        for count in (2, 3, 4, 5):
+            client = world()
+            result = go(client, FakeLlm(answerWithHints(count)))
+            self.assertEqual([row["hint_level"] for row in hintRows(client)], list(range(1, count + 1)), count)
+            self.assertEqual(result["generated"], 1)
+
+    def test_levels_above_the_new_count_are_removed_so_a_regeneration_cannot_leave_old_hints_behind(self):
+        client = world()
+        go(client, FakeLlm(answerWithHints(3)))
+        delete = client.writes("hints", "delete")[0]
+        self.assertEqual(delete.eqFilters, [("problem_id", "1_A")])
+        self.assertEqual(delete.gtFilters, [("hint_level", 3)])
+
+    def test_nothing_is_deleted_in_a_dry_run(self):
+        client = world()
+        go(client, FakeLlm(), dryRun=True)
+        self.assertEqual(client.writes("hints", "delete"), [])
 
     def test_the_model_sees_the_problem_samples_and_editorial(self):
         client, llm = world(), FakeLlm()
