@@ -2,6 +2,8 @@ import type { ApiRequest, ApiResponse, HintsRepository } from '../types.ts'
 import { toHintsPayload, type HintsPayload } from '../controllers/hintsController.ts'
 import type { RateLimiter } from '../middlewares/rateLimiter.ts'
 import type { TtlCache } from '../middlewares/ttlCache.ts'
+import { buildOpenApiDocument } from '../docs/openapi.ts'
+import { renderDocsHtml } from '../docs/renderDocs.ts'
 
 export interface RouterDeps {
   repository: HintsRepository
@@ -11,6 +13,7 @@ export interface RouterDeps {
   log?: (entry: Record<string, unknown>) => void
   positiveTtlMs?: number // how long found hints stay in memory
   negativeTtlMs?: number // how long "no hints (yet)" stays in memory
+  publicBaseUrl?: string // shown in the documentation (PUBLIC_BASE_URL)
 }
 
 const ALLOWED_METHODS = 'GET, HEAD, OPTIONS'
@@ -25,6 +28,7 @@ const BASE_HEADERS = {
 }
 const FOUND_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400'
 const NOT_FOUND_CACHE_CONTROL = 'public, max-age=60'
+const DOCS_CACHE_CONTROL = 'public, max-age=3600'
 
 function json(status: number, payload: unknown, cacheControl = 'no-store', extra: Record<string, string> = {}): ApiResponse {
   return { status, headers: { ...BASE_HEADERS, 'Cache-Control': cacheControl, ...extra }, body: JSON.stringify(payload) }
@@ -40,6 +44,8 @@ export function createRouter(deps: RouterDeps) {
   const positiveTtlMs = deps.positiveTtlMs ?? 10 * 60_000
   const negativeTtlMs = deps.negativeTtlMs ?? 60_000
   const inFlight = new Map<string, Promise<HintsPayload | null>>()
+  const openApiDocument = buildOpenApiDocument(deps.publicBaseUrl ?? 'https://YOUR-API-HOST')
+  const docsHtml = renderDocsHtml(openApiDocument)
 
   async function lookup(contestId: number, index: string): Promise<HintsPayload | null> {
     const key = `${contestId}_${index}`
@@ -86,6 +92,28 @@ export function createRouter(deps: RouterDeps) {
       return {
         route: 'rate_limited',
         response: errorResponse(429, 'rate_limited', 'Too many requests. Please slow down.', { 'Retry-After': String(decision.retryAfterSeconds) }),
+      }
+    }
+
+    if (request.path === '/' || request.path === '/v1/docs' || request.path === '/v1/openapi.json') {
+      if (method !== 'GET' && method !== 'HEAD') {
+        return { route: 'docs', response: errorResponse(405, 'method_not_allowed', 'Only GET is supported.', { Allow: ALLOWED_METHODS }) }
+      }
+      if (request.path === '/v1/openapi.json') {
+        return { route: 'docs', response: json(200, openApiDocument, DOCS_CACHE_CONTROL) }
+      }
+      return {
+        route: 'docs',
+        response: {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': DOCS_CACHE_CONTROL,
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+          },
+          body: docsHtml,
+        },
       }
     }
 

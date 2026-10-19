@@ -118,7 +118,7 @@ test('a problem without public hints is a plain 404 that does not say why', asyn
 
 test('unknown paths are 404s', async () => {
   const { router, calls } = setup()
-  for (const path of ['/', '/v1', '/v1/problems', '/v1/problems/1944/C', '/v2/problems/1944/C/hints', '/admin']) {
+  for (const path of ['/v1', '/v1/problems', '/v1/problems/1944/C', '/v2/problems/1944/C/hints', '/admin']) {
     assert.equal((await router(get(path))).status, 404, path)
   }
   assert.deepEqual(calls, [])

@@ -81,6 +81,10 @@ venv/bin/python -u -m src.workers.hint_generator.generateHints --limit 20
 
 # 7. Serve the hints (needs SUPABASE_DATABASE_URL and SUPABASE_PUBLISHABLE_KEY)
 node src/api/server.ts
+#    The server documents itself: open http://localhost:8080/ in a browser, or GET /v1/openapi.json
+
+# All of the above, every day, automatically: see docs/automation.md
+scripts/daily.sh
 
 # Remove problems and contests that were added to config/IGNORE_THESE_CONTESTS
 node src/core/database/deleteProblem.ts
@@ -92,7 +96,10 @@ The emergency scripts in `src/core/database/admin/` are described in their own R
 
 ## The public API
 
-Read-only, no key needed:
+Read-only, no key needed. The running server documents itself: `GET /` (a readable page) and `GET /v1/openapi.json`
+(OpenAPI 3.1, usable with any API tool). Set `PUBLIC_BASE_URL` so the examples show your address.
+
+
 
 ```
 GET /v1/problems/{contestId}/{index}/hints     e.g. /v1/problems/1944/C/hints

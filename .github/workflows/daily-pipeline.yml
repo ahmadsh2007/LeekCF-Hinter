@@ -1,0 +1,45 @@
+# Runs scripts/daily.sh every day: detect new problems, scrape them, link duplicates, find tutorials, generate hints.
+# It does nothing until you create the repository variable PIPELINE_ENABLED=true (or start it by hand from the
+# Actions tab). Secrets and variables to create are listed in docs/automation.md.
+# Not run by the author: GitHub's servers may be blocked by Codeforces (Cloudflare); try one manual run first.
+name: Daily pipeline
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.PIPELINE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      PYTHON: python
+      SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      SUPABASE_DATABASE_SECRET_KEY: ${{ secrets.SUPABASE_DATABASE_SECRET_KEY }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      GEMINI_THINKING_LEVEL: ${{ vars.GEMINI_THINKING_LEVEL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+      SCRAPE_LIMIT: ${{ vars.SCRAPE_LIMIT }}
+      TUTORIAL_CONTEST_LIMIT: ${{ vars.TUTORIAL_CONTEST_LIMIT }}
+      HINT_LIMIT: ${{ vars.HINT_LIMIT }}
+      INCLUDE_WITHOUT_TUTORIAL: ${{ vars.INCLUDE_WITHOUT_TUTORIAL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: npm ci
+      - run: pip install -r requirements.txt
+      - run: scripts/daily.sh

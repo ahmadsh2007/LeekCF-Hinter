@@ -11,6 +11,7 @@ import type { HintsPayload } from './controllers/hintsController.ts'
 //   SUPABASE_DATABASE_URL        project URL
 //   SUPABASE_PUBLISHABLE_KEY     the publishable (anon) key. NOT the secret key; the server refuses that.
 //   PORT                         default 8080 (Cloud Run sets it)
+//   PUBLIC_BASE_URL              the address people use, shown in the documentation (default: a placeholder)
 //   RATE_LIMIT_PER_MINUTE        per client address and instance, default 60 (also the burst size)
 const url = process.env.SUPABASE_DATABASE_URL
 const key = process.env.SUPABASE_PUBLISHABLE_KEY
@@ -25,6 +26,7 @@ const route = createRouter({
   repository: createSupabaseHintsRepository(url, key as string),
   limiter: new RateLimiter(perMinute, perMinute / 60),
   cache: new TtlCache<HintsPayload | null>(10 * 60_000, 5_000),
+  publicBaseUrl: process.env.PUBLIC_BASE_URL,
 })
 
 const server = http.createServer(createApp(route))
