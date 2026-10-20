@@ -54,10 +54,17 @@ time because all progress is in the database. Afterwards `scripts/daily.sh` keep
 
 `.github/workflows/daily-pipeline.yml` runs `scripts/daily.sh` on GitHub's servers every day at **08:15 UTC**, right
 after Google resets the free daily model quotas (midnight US Pacific is 07:00 UTC, or 08:00 UTC when the US clocks go
-back). One run therefore spends the whole day's free quota: about 80 hints from the four 20-a-day flash models plus
-about 500 from `gemini-3.5-flash-lite`. `HINT_LIMIT=600` keeps the run to about four hours, inside GitHub's six-hour cap.
+back). One run therefore spends the whole day's free quota: about 80 problems from the four 20-a-day flash models (about
+100 s each) plus about 470 from `gemini-3.5-flash-lite` (about 18 s each), measured on 2026-10-20. That is about 4.6 hours
+of GitHub's six-hour cap, and the quota, not `HINT_LIMIT`, is what ends the run: it stops by itself when every model in
+the list has used up its day. `HINT_LIMIT=1000` is simply above what one day can produce, so it never holds a run back;
+lower it if you ever want to cap a run. The backlog therefore clears at about 550 problems a day.
 `.github/workflows/usage-export.yml` saves the API's usage statistics (`docs/usage-stats.md`). Both are free for a public
 repository.
+
+**Rotating the Supabase secret key.** Create the new key in Supabase, then run `scripts/setup-github-automation.sh` again
+and paste the new key at the Supabase stage: it replaces the old one in `~/leekcf-env/staging.env` and in GitHub. Settings
+that already have a value on GitHub (`HINT_LIMIT`, the model list, ...) are kept, not reset.
 
 One command creates every secret and setting, starts test runs and switches the schedules on, step by step:
 

@@ -200,6 +200,18 @@ finish() {
 
 run_wizard() {
 
+# keep_var NAME DEFAULT sets a GitHub variable only when it has no value yet. A setting someone changed on purpose
+# (a higher HINT_LIMIT, another model list) therefore survives running this wizard again, for example after rotating a key.
+keep_var() {
+  local name="$1" default="$2" current
+  current=$(gh variable get "$name" 2>/dev/null || true)
+  if [[ -n "$current" ]]; then
+    printf '  %s✓ kept%s GitHub variable %s=%s\n' "$GREEN" "$RESET" "$name" "$current"
+  else
+    set_var "$name" "$default"
+  fi
+}
+
 # gh must run inside the repository, whatever folder the wizard was started from.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # Without ENV_FILE the library would write a .env into the repository; use the project's usual settings file instead.
@@ -250,7 +262,18 @@ until [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]]; do
 done
 write_env CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
 
-# ── 3. Try the usage export here ──────────────────────────────────────────
+# ── 3. The database ───────────────────────────────────────────────────────
+# Asked before anything is tried here, and written back to ENV_FILE: a key pasted after rotating it in Supabase must
+# reach this computer's settings too, not only GitHub, or the next command run here fails with the old key.
+stage "Supabase: the database the job writes to"
+say "Same project as now. Enter keeps the values already in $ENV_FILE."
+note "After you rotate the secret key in Supabase, paste the NEW key here: it replaces the old one on this computer and on GitHub."
+ask SUPABASE_DATABASE_URL "Supabase project URL:"
+write_env SUPABASE_DATABASE_URL "$SUPABASE_DATABASE_URL"
+ask_secret SUPABASE_DATABASE_SECRET_KEY "Supabase secret key (hidden):"
+write_env SUPABASE_DATABASE_SECRET_KEY "$SUPABASE_DATABASE_SECRET_KEY"
+
+# ── 4. Try the usage export here ──────────────────────────────────────────
 stage "Try the usage export once, here on this computer"
 say "It reads the usage numbers from Cloudflare and saves them in your database."
 note "'Saved 0 rows' is normal if nobody has called the API since the last deploy."
@@ -266,18 +289,12 @@ else
   SKIPPED+=("Trying the export once: ENV_FILE=$ENV_FILE $PYTHON -m src.workers.usage.rollupUsage")
 fi
 
-# ── 4. The Gemini key ─────────────────────────────────────────────────────
+# ── 5. The Gemini key ─────────────────────────────────────────────────────
 stage "Gemini: the key that writes the hints"
 say "GitHub's servers will write the hints, so they need the same free Gemini key."
 note "Enter keeps the key already in $ENV_FILE. To make a new one: https://aistudio.google.com/apikey"
 ask_secret GEMINI_API_KEY "Gemini API key (hidden):"
 write_env GEMINI_API_KEY "$GEMINI_API_KEY"
-
-# ── 5. The database ───────────────────────────────────────────────────────
-stage "Supabase: the database the job writes to"
-say "Same project as now. Enter keeps the values already in $ENV_FILE."
-ask SUPABASE_DATABASE_URL "Supabase project URL:"
-ask_secret SUPABASE_DATABASE_SECRET_KEY "Supabase secret key (hidden):"
 warn "If you rotate the Supabase secret key later, run this wizard again so GitHub gets the new one."
 
 # ── 6. Store it all on GitHub ─────────────────────────────────────────────
@@ -286,8 +303,9 @@ target=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo
 say "Target: $target. Secrets are kept encrypted by GitHub; only its workflows can read them."
 say "Secrets: the database URL and secret key, the Gemini key, the Cloudflare token and account id."
 say "Settings (not secret, change them any time in the repository's Settings → Variables):"
-note "  LLM_PROVIDER=gemini   GEMINI_THINKING_LEVEL=high   HINT_LIMIT=600   TUTORIAL_CONTEST_LIMIT=400"
+note "  LLM_PROVIDER=gemini   GEMINI_THINKING_LEVEL=high   HINT_LIMIT=1000   TUTORIAL_CONTEST_LIMIT=400"
 note "  GEMINI_MODEL=$GEMINI_MODEL_LIST"
+note "  A setting that already has a value on GitHub is kept as it is, so running this again undoes none of your changes."
 note "  USAGE_EXPORT_ENABLED=true  (the daily usage export is switched on now; the hint pipeline is switched on in stage 8)"
 if confirm "Store them in $target?"; then
   set_secret SUPABASE_DATABASE_URL "$SUPABASE_DATABASE_URL"
@@ -295,11 +313,11 @@ if confirm "Store them in $target?"; then
   set_secret GEMINI_API_KEY "$GEMINI_API_KEY"
   set_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
   set_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
-  set_var LLM_PROVIDER gemini
-  set_var GEMINI_MODEL "$GEMINI_MODEL_LIST"
-  set_var GEMINI_THINKING_LEVEL high
-  set_var HINT_LIMIT 600
-  set_var TUTORIAL_CONTEST_LIMIT 400
+  keep_var LLM_PROVIDER gemini
+  keep_var GEMINI_MODEL "$GEMINI_MODEL_LIST"
+  keep_var GEMINI_THINKING_LEVEL high
+  keep_var HINT_LIMIT 1000
+  keep_var TUTORIAL_CONTEST_LIMIT 400
   set_var USAGE_EXPORT_ENABLED true
 else
   SKIPPED+=("The GitHub secrets and settings: run this wizard again, or see docs/automation.md")

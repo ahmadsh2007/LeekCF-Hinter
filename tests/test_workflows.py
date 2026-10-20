@@ -38,7 +38,7 @@ class UsageExportWorkflowTests(unittest.TestCase):
         self.assertRegex(self.text, r"concurrency:\s*\n\s*group: usage-export")
 
 
-class DailyPipelineWorkflowTests(unittest.TestCase):
+class DailyPipelineStatusReportTests(unittest.TestCase):
     def setUp(self):
         self.text = PIPELINE.read_text()
 
@@ -67,7 +67,7 @@ class SetupWizardTests(unittest.TestCase):
             self.assertIn(f"secrets.{name}", workflowTexts(), name)
 
     def test_every_variable_it_sets_is_one_a_workflow_reads(self):
-        names = set(re.findall(r"^\s*set_var ([A-Z_]+) ", self.text, re.M))
+        names = set(re.findall(r"^\s*(?:set_var|keep_var) ([A-Z_]+) ", self.text, re.M))
         self.assertEqual(names, {"LLM_PROVIDER", "GEMINI_MODEL", "GEMINI_THINKING_LEVEL", "HINT_LIMIT",
                                  "TUTORIAL_CONTEST_LIMIT", "USAGE_EXPORT_ENABLED", "PIPELINE_ENABLED"})
         for name in names:
