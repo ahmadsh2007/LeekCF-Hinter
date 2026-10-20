@@ -121,3 +121,11 @@ test('the docs routes are read-only like everything else', async () => {
   assert.equal(head.status, 200)
   assert.equal(head.body, '')
 })
+
+test('the page asks integrators to name their app and shows both ways to do it', () => {
+  const page = renderDocsHtml(doc)
+  assert.match(page, /Name your app/)
+  assert.match(page, /X-Client/)
+  assert.match(page, /\?client=/)
+  assert.match(page, /Retry-After/)
+})

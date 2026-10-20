@@ -57,6 +57,7 @@ ${sections.join('\n')}
 <p>Errors are JSON: <code>{"error": {"code": "...", "message": "..."}}</code>. Codes: ${codes.map((code) => `<code>${escapeHtml(code)}</code>`).join(', ')}.</p>
 <h2>Being a good client</h2>
 <ul>
+<li>Name your app: send <code>X-Client: my-app/1.0</code>, or in a browser add <code>?client=my-app/1.0</code> to the URL (no preflight request). It only feeds anonymous usage statistics, so we can see which apps use the API; no addresses are stored.</li>
 <li>Stay under the rate limit (HTTP 429 carries a <code>Retry-After</code> header) and cache answers; hints rarely change.</li>
 <li>Show hints one at a time so readers are not spoiled by accident.</li>
 <li>Link back to the problem on codeforces.com; this API does not serve statements or editorials.</li>

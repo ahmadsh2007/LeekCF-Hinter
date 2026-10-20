@@ -13,7 +13,10 @@ export function createApp(route: (request: ApiRequest) => Promise<ApiResponse>):
         // Split by hand: new URL() would treat "//host/path" as a host.
         path: (req.url ?? '/').split('?')[0],
         ip: clientIp(Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor, req.socket.remoteAddress),
-        client: clientLabel({ get: (name) => { const value = req.headers[name]; return Array.isArray(value) ? value.join(',') : (value ?? null) } }),
+        client: clientLabel(
+          { get: (name) => { const value = req.headers[name]; return Array.isArray(value) ? value.join(',') : (value ?? null) } },
+          new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('client'),
+        ),
       }
       const response = await route(request)
       res.writeHead(response.status, response.headers)

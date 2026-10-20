@@ -156,3 +156,48 @@ test('the documentation tells integrators how to identify their app', () => {
   assert.equal(header.in, 'header')
   assert.equal(header.required, false)
 })
+
+test('a browser app can name itself in the url, since a custom header would need a preflight', () => {
+  const headers = (h: Record<string, string>) => new Headers(h)
+  assert.equal(clientLabel(headers({}), 'leekcf-ratings/3.0.1'), 'leekcf-ratings/3.0.1')
+  assert.equal(clientLabel(headers({ 'user-agent': 'Mozilla/5.0 (X11)' }), 'leekcf-ratings/3.0.1'), 'leekcf-ratings/3.0.1')
+  assert.equal(clientLabel(headers({ 'x-client': 'from-header/1' }), 'from-url/2'), 'from-header/1')
+  assert.equal(clientLabel(headers({ 'user-agent': 'curl/8.7.1' }), '   '), 'curl')
+  assert.equal(clientLabel(headers({}), 'evil"}{"severity":"ERROR"'), 'evil severity ERROR')
+  assert.ok(clientLabel(headers({}), 'a'.repeat(500)).length <= 60)
+})
+
+test('the ?client= label reaches the logs and the statistics, whether or not the answer came from the edge cache', async () => {
+  const { worker, logs, cache } = setup()
+  const points: any[] = []
+  const withAnalytics = { ...env, ANALYTICS: { writeDataPoint: (p: any) => points.push(p) } } as any
+  const c = ctx()
+  await worker.fetch(get('/v1/problems/1944/C/hints?client=leekcf-ratings%2F3.0.1'), withAnalytics, c)
+  await c.settle()
+  await worker.fetch(get('/v1/problems/1944/C/hints?client=leekcf-ratings%2F3.0.1'), withAnalytics, ctx()) // now a cache hit
+  const requests = logs.filter((e) => e.message === 'request')
+  assert.deepEqual(requests.map((e) => e.client), ['leekcf-ratings/3.0.1', 'leekcf-ratings/3.0.1'])
+  assert.equal(requests[1].cache, 'hit')
+  assert.deepEqual(points.map((p) => p.blobs[2]), ['leekcf-ratings/3.0.1', 'leekcf-ratings/3.0.1'])
+  assert.equal(cache.store.size, 1)
+})
+
+test('the edge cache ignores the query string, so ?client= and made-up parameters share one entry', async () => {
+  const { worker, calls, cache } = setup()
+  const c = ctx()
+  await worker.fetch(get('/v1/problems/1944/C/hints?client=ext%2F1.0'), env, c)
+  await c.settle()
+  assert.deepEqual([...cache.store.keys()], ['https://hints.example.org/v1/problems/1944/C/hints'])
+  const other = await worker.fetch(get('/v1/problems/1944/C/hints?client=site%2F2&cachebust=123'), env, ctx())
+  assert.equal(other.status, 200)
+  assert.equal(calls.length, 1)
+})
+
+test('the documentation lists the client query parameter next to the header', () => {
+  const doc = buildOpenApiDocument('https://x') as any
+  const parameters = doc.paths['/v1/problems/{contestId}/{index}/hints'].get.parameters
+  const query = parameters.find((p: any) => p.name === 'client')
+  assert.equal(query.in, 'query')
+  assert.equal(query.required, false)
+  assert.equal(query.schema.maxLength, 60)
+})

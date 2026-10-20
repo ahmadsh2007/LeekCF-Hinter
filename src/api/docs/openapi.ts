@@ -54,7 +54,12 @@ export function buildOpenApiDocument(publicBaseUrl: string): Record<string, unkn
             },
             {
               name: 'X-Client', in: 'header', required: false,
-              description: 'Optional but appreciated: the name of your app, e.g. "my-extension/1.0". It is used only for anonymous usage statistics per app (no addresses are stored).',
+              description: 'Optional but appreciated: the name of your app, e.g. "my-extension/1.0". It is used only for anonymous usage statistics per app (no addresses are stored). Wins over the client query parameter when both are sent.',
+              schema: { type: 'string', maxLength: 60 }, example: 'my-extension/1.0',
+            },
+            {
+              name: 'client', in: 'query', required: false,
+              description: 'The same as the X-Client header, for browser apps: a plain GET with a query parameter needs no preflight request. Example: ?client=my-extension/1.0. The answer is the same with or without it.',
               schema: { type: 'string', maxLength: 60 }, example: 'my-extension/1.0',
             },
           ],

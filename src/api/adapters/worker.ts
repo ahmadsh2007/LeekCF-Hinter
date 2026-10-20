@@ -74,12 +74,15 @@ export function createWorker(deps: WorkerDeps = {}) {
     async fetch(request: Request, env: WorkerEnv, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
       const startedAt = Date.now()
       const url = new URL(request.url)
-      const client = clientLabel(request.headers)
+      const client = clientLabel(request.headers, url.searchParams.get('client'))
       const cache = deps.cache ?? ((globalThis as any).caches?.default as EdgeCache | undefined)
       const cacheable = request.method === 'GET' && cache !== undefined
+      // The answer does not depend on the query string, so key the cache on the path alone: ?client= must not give
+      // every app its own entry, and made-up parameters must not be a way around the cache.
+      const cacheKey = new Request(url.origin + url.pathname)
 
       if (cacheable) {
-        const hit = await cache.match(request)
+        const hit = await cache.match(cacheKey)
         if (hit) {
           // Served by Cloudflare's cache without running the router: still counted.
           const durationMs = Date.now() - startedAt
@@ -106,7 +109,7 @@ export function createWorker(deps: WorkerDeps = {}) {
       const response = new Response(result.body === '' ? null : result.body, { status: result.status, headers: result.headers })
 
       if (cacheable && CACHEABLE_STATUSES.includes(result.status) && /public/.test(result.headers['Cache-Control'] ?? '')) {
-        ctx.waitUntil(cache.put(request, response.clone()))
+        ctx.waitUntil(cache.put(cacheKey, response.clone()))
       }
       return response
     },

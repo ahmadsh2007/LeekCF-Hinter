@@ -103,3 +103,23 @@ test('the supabase repository turns a database error into an exception', async (
   const repository = createSupabaseHintsRepository('https://example.supabase.co', 'sb_publishable_test', failing)
   await assert.rejects(() => repository.findHints(1944, 'C'), /boom/)
 })
+
+test('the node server reads the client name from the url too', async () => {
+  const logs: Array<Record<string, unknown>> = []
+  const repository: HintsRepository = { async findHints() { return sampleRows } }
+  const route = createRouter({
+    repository,
+    limiter: new RateLimiter(100, 0.001),
+    cache: new TtlCache<HintsPayload | null>(600_000, 100),
+    log: (entry) => logs.push(entry),
+  })
+  const server = http.createServer(createApp(route))
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    await fetch(`${base}/v1/problems/1944/C/hints?client=leekcf-ratings%2F3.0.1`)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+  assert.equal(logs.find((e) => e.message === 'request')?.client, 'leekcf-ratings/3.0.1')
+})

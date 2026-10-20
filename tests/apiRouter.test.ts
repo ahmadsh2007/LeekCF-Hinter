@@ -157,6 +157,16 @@ test('preflight requests are answered with the cors headers', async () => {
   assert.deepEqual(calls, [])
 })
 
+test('a browser may send X-Client, and may read Retry-After on a rate-limit answer', async () => {
+  const { router } = setup({ capacity: 1 })
+  const preflight = await router(get('/v1/problems/1944/C/hints', '1.1.1.1', 'OPTIONS'))
+  assert.match(preflight.headers['Access-Control-Allow-Headers'], /X-Client/i)
+  await router(get('/v1/problems/1944/A/hints', '5.5.5.5'))
+  const refused = await router(get('/v1/problems/1944/B/hints', '5.5.5.5'))
+  assert.equal(refused.status, 429)
+  assert.match(refused.headers['Access-Control-Expose-Headers'], /Retry-After/i)
+})
+
 test('health needs no database', async () => {
   const { router, calls } = setup({ error: new Error('db down') })
   const response = await router(get('/v1/health'))

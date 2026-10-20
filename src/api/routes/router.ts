@@ -25,6 +25,7 @@ const BASE_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'X-Content-Type-Options': 'nosniff',
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Expose-Headers': 'Retry-After', // lets a browser app read how long to wait after a 429
 }
 const FOUND_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400'
 const NOT_FOUND_CACHE_CONTROL = 'public, max-age=60'
@@ -74,7 +75,7 @@ export function createRouter(deps: RouterDeps) {
         route: 'preflight',
         response: {
           status: 204,
-          headers: { ...BASE_HEADERS, 'Access-Control-Allow-Methods': ALLOWED_METHODS, 'Access-Control-Max-Age': '86400' },
+          headers: { ...BASE_HEADERS, 'Access-Control-Allow-Methods': ALLOWED_METHODS, 'Access-Control-Allow-Headers': 'X-Client', 'Access-Control-Max-Age': '86400' },
           body: '',
         },
       }
