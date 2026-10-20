@@ -1,0 +1,32 @@
+# Copies the public API's daily usage statistics from Cloudflare's Analytics Engine into the database, once a day.
+# Cloudflare keeps them for three months only; the database keeps them for as long as the project lives.
+# It does nothing until the repository variable USAGE_EXPORT_ENABLED=true exists (or you start it by hand from the
+# Actions tab). The wizard scripts/setup-usage-stats.sh creates the four secrets and the variable; see docs/usage-stats.md.
+name: Usage export
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: usage-export
+  cancel-in-progress: false
+
+jobs:
+  export:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.USAGE_EXPORT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      SUPABASE_DATABASE_SECRET_KEY: ${{ secrets.SUPABASE_DATABASE_SECRET_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r requirements.txt
+      - run: python -u -m src.workers.usage.rollupUsage

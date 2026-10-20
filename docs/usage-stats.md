@@ -21,8 +21,8 @@ query parameter, then the User-Agent's first word. Apps are asked to send `my-ap
 | Analytics Engine (Cloudflare) | one data point per request | **3 months** |
 | `api_usage_daily` (your Supabase database) | daily totals per app, route and status | **as long as the project** |
 
-Cloudflare cannot keep more than 3 months, so a daily job (`src/workers/usage/rollupUsage.py`) copies the daily totals
-into the database. It re-reads the last 7 days every run and upserts, so a missed day heals itself; after a longer gap it
+Cloudflare cannot keep more than 3 months, so a daily job (`src/workers/usage/rollupUsage.py`, run by a scheduled
+GitHub workflow) copies the daily totals into the database. It re-reads the last 7 days every run and upserts, so a missed day heals itself; after a longer gap it
 reads back as far as the last saved day, up to the 90 days Cloudflare still has. Run it at least once every 3 months or
 older days are gone. The table is included in the backups (`src/workers/backup`), because unlike the hints it cannot be
 regenerated.
@@ -34,22 +34,25 @@ regenerated.
 2. **Deploy the Worker:** `npx wrangler deploy`. The binding in `wrangler.toml` creates the dataset on the first write.
    If Cloudflare says Analytics Engine has to be enabled for the account, enable it in the dashboard
    (*Workers & Pages → Analytics Engine*) and deploy again.
-3. **Make a read-only API token.** Cloudflare dashboard → *My Profile → API Tokens → Create Token → Create Custom Token*,
-   permission **Account → Account Analytics → Read**. Copy the token once; it is shown only then.
-4. **Find your account id:** the long hex string in the dashboard address after `dash.cloudflare.com/`, or on the right
-   of *Workers & Pages → Overview*.
-5. **Add both to `~/leekcf-env/staging.env`** (never to the repository):
-   ```
-   CLOUDFLARE_ACCOUNT_ID=...
-   CLOUDFLARE_API_TOKEN=...
-   ```
-   For GitHub Actions add them as repository secrets with the same names.
-6. **Try it** once some requests have arrived:
+3. **Run the setup wizard** (it opens each page, tells you what to click, hides what you paste, and stores the values):
    ```bash
-   ENV_FILE=~/leekcf-env/staging.env venv/bin/python -m src.workers.usage.rollupUsage
+   ENV_FILE=~/leekcf-env/staging.env scripts/setup-usage-stats.sh
    ```
-   It prints how many daily rows it saved. From then on `scripts/daily.sh` does it as its last stage, and skips it
-   quietly when the two settings are missing.
+   It walks through five stages:
+   1. a **read-only Cloudflare API token** (permission *Account → Account Analytics → Read*), saved to the env file;
+   2. your **Cloudflare account id**, found for you through `wrangler` when possible;
+   3. a **trial run** of the export on this computer;
+   4. the **four GitHub secrets** the daily workflow needs, and the variable `USAGE_EXPORT_ENABLED=true` that switches it on;
+   5. a **first run on GitHub**, so you see it work without waiting for tomorrow.
+
+   After that the export runs by itself on GitHub's servers every day at 03:17 UTC (`.github/workflows/usage-export.yml`).
+   Your computer does not need to be on, and nothing runs on Cloudflare: the job needs the database's secret key, which
+   must never be placed in the public Worker. If you rotate the Supabase secret key, run the wizard again.
+
+   Without the wizard: create the token and the secrets by hand (names in `docs/automation.md`), put
+   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the env file, and try
+   `ENV_FILE=~/leekcf-env/staging.env venv/bin/python -m src.workers.usage.rollupUsage`.
+   `scripts/daily.sh` also runs it as its last stage when those two settings are present.
 
 **Not verified yet:** the query and the answer format follow Cloudflare's documentation but have not been run against a
 real dataset. If the first run stops with "Unexpected row" or an HTTP error, the message says what Cloudflare sent.
