@@ -144,6 +144,11 @@ class ValidationFailureTests(unittest.TestCase):
     def test_statement_div_that_has_a_class_is_not_the_statement(self):
         self.assertRejected(buildPage(statementDiv='<div class="oops"><p>x</p></div>'), "Problem statement text div")
 
+    def test_older_pages_put_the_statement_in_a_div_called_legend(self):
+        # e.g. Codeforces 238E and 505C
+        specs, _ = parse_problem_details_strictly(buildPage(statementDiv='<div class="legend"><p>Old layout.</p></div>'))
+        self.assertEqual(specs["statement_text"], "Old layout.")
+
     def test_a_standard_problem_must_have_an_input_section(self):
         self.assertRejected(buildPage(inputSection=""), "input_specification")
 
@@ -164,8 +169,19 @@ class ValidationFailureTests(unittest.TestCase):
     def test_a_sample_section_without_any_sample_is_still_a_broken_page(self):
         self.assertRejected(buildPage(samples='<div class="sample-tests"><div class="section-title">Examples</div></div>'), "Sample tests container")
 
-    def test_sample_container_without_pre_tags(self):
-        samples = '<div class="sample-tests"><div class="sample-test"></div></div>'
+    def test_an_examples_heading_over_an_empty_box_means_the_problem_has_no_samples(self):
+        # e.g. Codeforces 207D1, 178E1, 241G: the heading is there but the box is empty (the tests are data files)
+        samples = '<div class="sample-tests"><div class="section-title">Examples</div><div class="sample-test"></div></div>'
+        specs, parsed = parse_problem_details_strictly(buildPage(samples=samples))
+        self.assertEqual(parsed, [])
+        self.assertTrue(specs["statement_text"])
+
+    def test_a_sample_box_with_inputs_but_no_outputs_is_a_broken_page(self):
+        samples = '<div class="sample-tests"><div class="sample-test"><div class="input"><pre>a</pre></div></div></div>'
+        self.assertRejected(buildPage(samples=samples), "<pre>")
+
+    def test_a_sample_box_with_outputs_but_no_inputs_is_a_broken_page(self):
+        samples = '<div class="sample-tests"><div class="sample-test"><div class="output"><pre>a</pre></div></div></div>'
         self.assertRejected(buildPage(samples=samples), "<pre>")
 
     def test_mismatched_sample_counts(self):

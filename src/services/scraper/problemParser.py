@@ -43,7 +43,8 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
         raise ScrapingValidationError("Main '.problem-statement' container not found.")
 
     childDivs = problemStatementDiv.find_all("div", recursive=False)
-    if len(childDivs) < 2 or childDivs[1].get("class"):
+    # The statement is the plain div after the header; older pages call it "legend".
+    if len(childDivs) < 2 or (childDivs[1].get("class") and childDivs[1].get("class") != ["legend"]):
         raise ScrapingValidationError("Problem statement text div not found at expected DOM hierarchy index.")
 
     statementText = extractText(childDivs[1])
@@ -81,7 +82,7 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
 
     # --- 3. STRICTLY PARSE SAMPLE TESTS ---
     # A few problems have no samples at all and no sample section (e.g. 1060H: "This problem has no sample tests").
-    # A sample section that exists must be complete.
+    # A sample section that has samples must have complete ones.
     samples = []
     sampleSection = soup.select_one(".problem-statement .sample-tests")
     if sampleSection is not None:
@@ -92,7 +93,8 @@ def parse_problem_details_strictly(soup: BeautifulSoup) -> tuple[dict, list[dict
         inputElems = sampleContainer.select(".input pre")
         outputElems = sampleContainer.select(".output pre")
 
-        if not inputElems or not outputElems:
+        # An "Examples" heading over an empty box means no samples (e.g. 207D1: the tests are data files).
+        if bool(inputElems) != bool(outputElems):
             raise ScrapingValidationError("Could not find any '<pre>' tags inside sample inputs/outputs.")
 
         if len(inputElems) != len(outputElems):
