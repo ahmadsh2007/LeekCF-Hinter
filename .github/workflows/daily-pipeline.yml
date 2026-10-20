@@ -1,12 +1,14 @@
-# Runs scripts/daily.sh every day: detect new problems, scrape them, link duplicates, find tutorials, generate hints.
-# It does nothing until you create the repository variable PIPELINE_ENABLED=true (or start it by hand from the
-# Actions tab). Secrets and variables to create are listed in docs/automation.md.
-# Not run by the author: GitHub's servers may be blocked by Codeforces (Cloudflare); try one manual run first.
+# Runs scripts/daily.sh every day: detect new problems, scrape them, link duplicates, find tutorials, generate hints,
+# save the API's usage statistics. It does nothing until the repository variable PIPELINE_ENABLED=true exists (or you
+# start it by hand from the Actions tab). scripts/setup-github-automation.sh creates every secret and variable.
+# It starts at 08:15 UTC, just after Google resets the free daily model quotas (midnight US Pacific is 07:00 UTC, or
+# 08:00 UTC when the US clocks go back), so one run uses the whole day's quota. HINT_LIMIT bounds the run's length.
+# Not yet run on GitHub: its servers may be refused by Codeforces (Cloudflare); look at the first manual run's log.
 name: Daily pipeline
 
 on:
   schedule:
-    - cron: "30 3 * * *"
+    - cron: "15 8 * * *"
   workflow_dispatch:
 
 concurrency:

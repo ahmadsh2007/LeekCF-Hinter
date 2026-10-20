@@ -206,10 +206,14 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if [[ "$ENV_FILE" == ".env" ]]; then ENV_FILE="$HOME/leekcf-env/staging.env"; fi
 PYTHON="${PYTHON:-venv/bin/python}"
 
-TOTAL_STAGES=5
+# The free models, best first. gemini-3.1-flash-lite is left out on purpose: at high thinking it needs about three
+# minutes per problem, which would use up the job's hours on a handful of problems.
+GEMINI_MODEL_LIST="gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite"
 
-banner "Save the API's usage statistics, automatically, for years"
-note "Settings go to $ENV_FILE (and, with your OK, to this repository's GitHub secrets)."
+TOTAL_STAGES=8
+
+banner "Move everything off this computer: GitHub runs it, Cloudflare serves it"
+note "Settings go to $ENV_FILE and, with your OK, to this repository's GitHub secrets and variables."
 printf '\n'
 
 # ── 1. The Cloudflare token ───────────────────────────────────────────────
@@ -246,8 +250,8 @@ until [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]]; do
 done
 write_env CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
 
-# ── 3. Try it here ────────────────────────────────────────────────────────
-stage "Try the export once, here on this computer"
+# ── 3. Try the usage export here ──────────────────────────────────────────
+stage "Try the usage export once, here on this computer"
 say "It reads the usage numbers from Cloudflare and saves them in your database."
 note "'Saved 0 rows' is normal if nobody has called the API since the last deploy."
 if confirm "Run it now?"; then
@@ -262,41 +266,79 @@ else
   SKIPPED+=("Trying the export once: ENV_FILE=$ENV_FILE $PYTHON -m src.workers.usage.rollupUsage")
 fi
 
-# ── 4. GitHub does it every day ───────────────────────────────────────────
-stage "GitHub: run it every day by itself"
-say "GitHub's servers will run the export once a day, so your Mac is not needed."
-say "That needs four secrets stored in the repository. GitHub keeps them encrypted."
-target=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "this repository")
-note "Target: $target"
-ask SUPABASE_DATABASE_URL "Supabase project URL (Enter keeps the one in $ENV_FILE):"
-ask_secret SUPABASE_DATABASE_SECRET_KEY "Supabase secret key, hidden (Enter keeps the one in the file):"
+# ── 4. The Gemini key ─────────────────────────────────────────────────────
+stage "Gemini: the key that writes the hints"
+say "GitHub's servers will write the hints, so they need the same free Gemini key."
+note "Enter keeps the key already in $ENV_FILE. To make a new one: https://aistudio.google.com/apikey"
+ask_secret GEMINI_API_KEY "Gemini API key (hidden):"
+write_env GEMINI_API_KEY "$GEMINI_API_KEY"
+
+# ── 5. The database ───────────────────────────────────────────────────────
+stage "Supabase: the database the job writes to"
+say "Same project as now. Enter keeps the values already in $ENV_FILE."
+ask SUPABASE_DATABASE_URL "Supabase project URL:"
+ask_secret SUPABASE_DATABASE_SECRET_KEY "Supabase secret key (hidden):"
 warn "If you rotate the Supabase secret key later, run this wizard again so GitHub gets the new one."
-if confirm "Store the four secrets in $target and switch the daily export on?"; then
+
+# ── 6. Store it all on GitHub ─────────────────────────────────────────────
+stage "GitHub: store the secrets and settings"
+target=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "this repository")
+say "Target: $target. Secrets are kept encrypted by GitHub; only its workflows can read them."
+say "Secrets: the database URL and secret key, the Gemini key, the Cloudflare token and account id."
+say "Settings (not secret, change them any time in the repository's Settings → Variables):"
+note "  LLM_PROVIDER=gemini   GEMINI_THINKING_LEVEL=high   HINT_LIMIT=600   TUTORIAL_CONTEST_LIMIT=400"
+note "  GEMINI_MODEL=$GEMINI_MODEL_LIST"
+note "  USAGE_EXPORT_ENABLED=true  (the daily usage export is switched on now; the hint pipeline is switched on in stage 8)"
+if confirm "Store them in $target?"; then
   set_secret SUPABASE_DATABASE_URL "$SUPABASE_DATABASE_URL"
   set_secret SUPABASE_DATABASE_SECRET_KEY "$SUPABASE_DATABASE_SECRET_KEY"
+  set_secret GEMINI_API_KEY "$GEMINI_API_KEY"
   set_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
   set_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
+  set_var LLM_PROVIDER gemini
+  set_var GEMINI_MODEL "$GEMINI_MODEL_LIST"
+  set_var GEMINI_THINKING_LEVEL high
+  set_var HINT_LIMIT 600
+  set_var TUTORIAL_CONTEST_LIMIT 400
   set_var USAGE_EXPORT_ENABLED true
 else
-  SKIPPED+=("The four GitHub secrets and the variable USAGE_EXPORT_ENABLED=true (see docs/usage-stats.md)")
+  SKIPPED+=("The GitHub secrets and settings: run this wizard again, or see docs/automation.md")
 fi
 
-# ── 5. First run on GitHub ────────────────────────────────────────────────
-stage "GitHub: run it once now"
-say "Starts the daily workflow by hand, so you see it work without waiting until tomorrow."
-note "It needs scripts and .github/workflows/usage-export.yml to be on the main branch."
-if confirm "Start it now?"; then
-  if gh workflow run usage-export.yml >/dev/null 2>&1; then
-    say "Started. Giving GitHub a few seconds to register it..."
-    sleep 8
-    gh run list --workflow usage-export.yml --limit 1 || true
-    note "Watch it with: gh run watch   (or the Actions tab of the repository)"
-  else
-    warn "Could not start it. Is usage-export.yml pushed to main?"
-    SKIPPED+=("Starting the workflow: gh workflow run usage-export.yml")
+# ── 7. Test runs ──────────────────────────────────────────────────────────
+stage "GitHub: start a test run of both jobs"
+say "1) The usage export is small and takes a minute."
+say "2) The daily pipeline is the real thing: it contacts Codeforces from GitHub's servers, finds tutorials, and writes"
+say "   hints with the day's free model quota. It can run for several hours."
+warn "Your Mac's hint generator uses the same Gemini key, so the two share one daily quota. Stop the Mac one once GitHub works."
+note "GitHub's servers might be refused by Codeforces. The run says so in its log, and then this plan needs another way."
+if confirm "Start both test runs now?"; then
+  if gh workflow run usage-export.yml >/dev/null 2>&1; then say "Started: usage-export"; else
+    warn "Could not start usage-export.yml. Are the workflows pushed to main?"
+    SKIPPED+=("gh workflow run usage-export.yml")
   fi
+  if gh workflow run daily-pipeline.yml >/dev/null 2>&1; then say "Started: daily-pipeline"; else
+    warn "Could not start daily-pipeline.yml. Are the workflows pushed to main?"
+    SKIPPED+=("gh workflow run daily-pipeline.yml")
+  fi
+  say "Giving GitHub a few seconds to register them..."
+  sleep 8
+  gh run list --limit 4 || true
+  note "Watch with: gh run watch   (or the repository's Actions tab). A green tick means it worked."
 else
-  SKIPPED+=("Starting the workflow once: gh workflow run usage-export.yml")
+  SKIPPED+=("Test runs: gh workflow run usage-export.yml ; gh workflow run daily-pipeline.yml")
+fi
+pause "Press Enter when you have looked at the runs (they may still be going)."
+
+# ── 8. The daily schedule ─────────────────────────────────────────────────
+stage "GitHub: switch the daily schedule on"
+say "The pipeline then runs by itself every day at 08:15 UTC (11:15 in Jordan), right after Google resets the free"
+say "daily model quotas, with no computer of yours involved."
+note "Say n if the test run is still going or failed. Later, switch it on with:  gh variable set PIPELINE_ENABLED --body true"
+if confirm "Switch the daily pipeline on now?"; then
+  set_var PIPELINE_ENABLED true
+else
+  SKIPPED+=("Switch the daily pipeline on: gh variable set PIPELINE_ENABLED --body true")
 fi
 
 finish

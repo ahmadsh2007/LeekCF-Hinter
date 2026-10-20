@@ -1,7 +1,7 @@
 # Copies the public API's daily usage statistics from Cloudflare's Analytics Engine into the database, once a day.
 # Cloudflare keeps them for three months only; the database keeps them for as long as the project lives.
 # It does nothing until the repository variable USAGE_EXPORT_ENABLED=true exists (or you start it by hand from the
-# Actions tab). The wizard scripts/setup-usage-stats.sh creates the four secrets and the variable; see docs/usage-stats.md.
+# Actions tab). The wizard scripts/setup-github-automation.sh creates the secrets and the variable; see docs/usage-stats.md.
 name: Usage export
 
 on:

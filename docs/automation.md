@@ -32,10 +32,38 @@ time because all progress is in the database. Afterwards `scripts/daily.sh` keep
 
 ## Where to run it
 
-Codeforces sits behind Cloudflare, which tends to accept home connections and may refuse the IP addresses of cloud
-providers. So the first choice is the one that costs nothing and comes from your own network.
+### 1. GitHub Actions (free, runs while your Mac is off): the plan
 
-### 1. On your Mac (free, most likely to work)
+`.github/workflows/daily-pipeline.yml` runs `scripts/daily.sh` on GitHub's servers every day at **08:15 UTC**, right
+after Google resets the free daily model quotas (midnight US Pacific is 07:00 UTC, or 08:00 UTC when the US clocks go
+back). One run therefore spends the whole day's free quota: about 80 hints from the four 20-a-day flash models plus
+about 500 from `gemini-3.5-flash-lite`. `HINT_LIMIT=600` keeps the run to about four hours, inside GitHub's six-hour cap.
+`.github/workflows/usage-export.yml` saves the API's usage statistics (`docs/usage-stats.md`). Both are free for a public
+repository.
+
+One command creates every secret and setting, starts test runs and switches the schedules on, step by step:
+
+```bash
+ENV_FILE=~/leekcf-env/staging.env scripts/setup-github-automation.sh
+```
+
+By hand, in **Settings → Secrets and variables → Actions**:
+
+- secrets: `SUPABASE_DATABASE_URL`, `SUPABASE_DATABASE_SECRET_KEY`, `GEMINI_API_KEY` (or `ANTHROPIC_API_KEY`), and for the
+  usage statistics `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`;
+- variables: `LLM_PROVIDER` (`gemini`), `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL`, `HINT_LIMIT`, `TUTORIAL_CONTEST_LIMIT`, and
+  finally `PIPELINE_ENABLED` = `true` (and `USAGE_EXPORT_ENABLED` = `true` for the usage export).
+
+**Not yet run on GitHub.** Start it once by hand from the **Actions** tab and read the log before trusting the schedule.
+Codeforces sits behind Cloudflare, which tends to accept home connections and may refuse the addresses of cloud
+providers: if the scraper or the tutorial finder reports 403 / "Codeforces is probably blocking" from GitHub's servers,
+that part has to stay on option 2 (the other parts still work). GitHub also switches schedules off in repositories with
+no activity for 60 days.
+
+Both the Mac and GitHub use the same Gemini key, so they share one daily quota: stop the Mac's `scripts/backfill.sh` once
+GitHub's runs work.
+
+### 2. On your Mac (free, most likely to work with Codeforces)
 
 Test once by hand: `ENV_FILE=~/leekcf-env/staging.env scripts/daily.sh`. Then run it every day with launchd. Save this as
 `~/Library/LaunchAgents/org.leekcf.hinter.plist`, replacing `YOUR_USER`:
@@ -49,28 +77,12 @@ Test once by hand: `ENV_FILE=~/leekcf-env/staging.env scripts/daily.sh`. Then ru
     <string>/bin/bash</string><string>-lc</string>
     <string>cd /Users/YOUR_USER/Desktop/LeekCF-Hinter &amp;&amp; ENV_FILE=$HOME/leekcf-env/staging.env /usr/bin/caffeinate -i scripts/daily.sh &gt;&gt; $HOME/leekcf-env/daily.log 2&gt;&amp;1</string>
   </array>
-  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>15</integer></dict>
 </dict></plist>
 ```
 
 Load it with `launchctl load ~/Library/LaunchAgents/org.leekcf.hinter.plist`. The Mac has to be on (a job that was due
 while it slept runs on wake). Read `~/leekcf-env/daily.log` to see what happened.
-
-### 2. GitHub Actions (free, runs while your Mac is off)
-
-`.github/workflows/daily-pipeline.yml` runs the same script on GitHub's servers every day. It does nothing until you
-enable it. In the repository's **Settings → Secrets and variables → Actions** create:
-
-- secrets: `SUPABASE_DATABASE_URL`, `SUPABASE_DATABASE_SECRET_KEY`, and the key of your model provider (optionally
-  `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, which turn on the daily copy of the API's usage statistics, see
-  `docs/usage-stats.md`)
-  (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`);
-- variables: `LLM_PROVIDER` (`gemini` or `anthropic`), the matching `GEMINI_MODEL` / `ANTHROPIC_MODEL`, and finally
-  `PIPELINE_ENABLED` = `true`.
-
-Start it once by hand from the **Actions** tab and read the log before trusting the schedule. If Codeforces answers
-with 403 from GitHub's servers (the scraper stops after five in a row and says so), use option 1 instead.
-GitHub also switches schedules off in repositories with no activity for 60 days.
 
 ### 3. Google Cloud (costs money)
 

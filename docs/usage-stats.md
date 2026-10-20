@@ -36,14 +36,13 @@ regenerated.
    (*Workers & Pages → Analytics Engine*) and deploy again.
 3. **Run the setup wizard** (it opens each page, tells you what to click, hides what you paste, and stores the values):
    ```bash
-   ENV_FILE=~/leekcf-env/staging.env scripts/setup-usage-stats.sh
+   ENV_FILE=~/leekcf-env/staging.env scripts/setup-github-automation.sh
    ```
-   It walks through five stages:
+   It also sets up the daily hint pipeline on GitHub (`docs/automation.md`). The parts that matter here:
    1. a **read-only Cloudflare API token** (permission *Account → Account Analytics → Read*), saved to the env file;
    2. your **Cloudflare account id**, found for you through `wrangler` when possible;
    3. a **trial run** of the export on this computer;
-   4. the **four GitHub secrets** the daily workflow needs, and the variable `USAGE_EXPORT_ENABLED=true` that switches it on;
-   5. a **first run on GitHub**, so you see it work without waiting for tomorrow.
+   4. later stages store the secrets on GitHub, start a test run, and switch the schedules on.
 
    After that the export runs by itself on GitHub's servers every day at 03:17 UTC (`.github/workflows/usage-export.yml`).
    Your computer does not need to be on, and nothing runs on Cloudflare: the job needs the database's secret key, which
