@@ -16,6 +16,16 @@ class FetchAllRowsFilterTests(unittest.TestCase):
         for call in client.selects("problems"):
             self.assertEqual(call.eqFilters, [("stage_status", "WAITING")])
 
+    def test_greater_than_filters_every_page(self):
+        rows = [{"id": f"{i:05d}", "created_at": f"2026-10-{1 + i % 28:02d}"} for i in range(3000)]
+        client = FakeSupabase({"hints": rows})
+
+        fetched = fetchAllRows(client, "hints", "id", "id", greaterThan={"created_at": "2026-10-20"})
+
+        self.assertEqual(len(fetched), sum(1 for row in rows if row["created_at"] > "2026-10-20"))
+        for call in client.selects("hints"):
+            self.assertEqual(call.gtFilters, [("created_at", "2026-10-20")])
+
     def test_several_order_columns_page_a_table_whose_key_has_two_parts_without_skipping_rows(self):
         rows = [{"problem_id": f"p{i // 3:04d}", "test_order": i % 3, "v": i} for i in range(2500)]
         client = FakeSupabase({"sample_tests": rows})

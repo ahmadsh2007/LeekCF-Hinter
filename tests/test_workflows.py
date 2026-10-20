@@ -35,6 +35,19 @@ class UsageExportWorkflowTests(unittest.TestCase):
         self.assertRegex(self.text, r"concurrency:\s*\n\s*group: usage-export")
 
 
+class DailyPipelineWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.text = PIPELINE.read_text()
+
+    def test_the_status_report_runs_last_even_when_the_pipeline_crashed(self):
+        self.assertLess(self.text.index("scripts/daily.sh"), self.text.index("src.workers.status.pipelineStatus"))
+        step = self.text[self.text.index("- name: Status report"):]
+        self.assertIn("if: always()", step)
+
+    def test_a_stall_fails_the_run_and_the_report_lands_on_the_run_page(self):
+        self.assertIn("pipelineStatus --strict --append-to \"$GITHUB_STEP_SUMMARY\"", self.text)
+
+
 class SetupWizardTests(unittest.TestCase):
     def setUp(self):
         self.text = WIZARD.read_text()

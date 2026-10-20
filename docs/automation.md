@@ -30,6 +30,24 @@ scripts instead, side by side:
 Both survive short database outages (502s, dropped connections) by retrying, and both can be stopped and started again at any
 time because all progress is in the database. Afterwards `scripts/daily.sh` keeps up with new contests.
 
+## Checking on it, and when something goes wrong
+
+- **GitHub → Actions tab** lists every run. A red cross means a stage crashed; open the run and the log of the step
+  "Run scripts/daily.sh": each stage prints a heading (`--- 1/6 scrape statements ---` … `--- 6/6 save the API usage statistics ---`),
+  so the error sits right under the stage that failed. GitHub emails you about failed runs by default (check
+  **github.com/settings/notifications → Actions**).
+- **A green run is not proof that anything was produced**: a stage that Codeforces blocks, or a model with no quota left,
+  stops quietly and the run goes on. So every run ends with a **Status report** step. Its report is on the run's page (under
+  the job list) and shows the problems per stage, what the last 24 hours produced (new problems, hints per model), why the
+  failed problems failed, and **warnings**. It turns the run red, and so produces the failure email, in two cases:
+  hints are waiting but none was written for a day (quota, key or model trouble: read stage 5), or statements stay unscraped
+  for more than two days (Codeforces refusing the connection: read stage 1).
+- **Look at any time, from the Mac**: `ENV_FILE=~/leekcf-env/staging.env venv/bin/python -m src.workers.status.pipelineStatus`
+- The three problems this cannot catch: GitHub switching the schedule off after 60 days without repository activity (the daily
+  runs just stop appearing in the Actions tab; any push, or **Enable workflow** there, starts them again), the Worker itself
+  being down (open `https://leekcf-hinter-api.leekcf.workers.dev/health`), and bad hints (the report counts hints, it cannot
+  judge them).
+
 ## Where to run it
 
 ### 1. GitHub Actions (free, runs while your Mac is off): the plan

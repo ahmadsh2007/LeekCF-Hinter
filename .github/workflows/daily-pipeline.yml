@@ -47,3 +47,9 @@ jobs:
       - run: npm ci
       - run: pip install -r requirements.txt
       - run: scripts/daily.sh
+      # A stage that is blocked or out of model quota stops quietly, so a green run can still have produced nothing.
+      # This report is shown at the top of the run's page, and makes the run fail (GitHub then emails you) when hints
+      # are waiting but none was written for a day, or statements stay unscraped for days.
+      - name: Status report
+        if: always()
+        run: python -u -m src.workers.status.pipelineStatus --strict --append-to "$GITHUB_STEP_SUMMARY"
