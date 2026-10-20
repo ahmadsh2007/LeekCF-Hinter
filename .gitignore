@@ -6,3 +6,6 @@ __pycache__/
 node_modules
 # macOS
 .DS_Store
+
+# Cloudflare Workers local runtime state (wrangler dev)
+.wrangler/
