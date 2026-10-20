@@ -14,8 +14,10 @@ export interface RouterDeps {
   positiveTtlMs?: number // how long found hints stay in memory
   negativeTtlMs?: number // how long "no hints (yet)" stays in memory
   publicBaseUrl?: string // shown in the documentation (PUBLIC_BASE_URL)
+  lookupTimeoutMs?: number // how long a request waits for the database before it answers 503
 }
 
+const DEFAULT_LOOKUP_TIMEOUT_MS = 8_000
 const ALLOWED_METHODS = 'GET, HEAD, OPTIONS'
 const HINTS_PATH = /^\/v1\/problems\/([^/]+)\/([^/]+)\/hints\/?$/
 const CONTEST_ID = /^\d{1,7}$/
@@ -44,6 +46,7 @@ export function createRouter(deps: RouterDeps) {
   const log = deps.log ?? ((entry: Record<string, unknown>) => console.log(JSON.stringify(entry)))
   const positiveTtlMs = deps.positiveTtlMs ?? 10 * 60_000
   const negativeTtlMs = deps.negativeTtlMs ?? 60_000
+  const lookupTimeoutMs = deps.lookupTimeoutMs ?? DEFAULT_LOOKUP_TIMEOUT_MS
   const inFlight = new Map<string, Promise<HintsPayload | null>>()
   const openApiDocument = buildOpenApiDocument(deps.publicBaseUrl ?? 'https://YOUR-API-HOST')
   const docsHtml = renderDocsHtml(openApiDocument)
@@ -56,15 +59,31 @@ export function createRouter(deps: RouterDeps) {
     // Many requests for the same cold problem share one database call.
     let pending = inFlight.get(key)
     if (!pending) {
-      pending = deps.repository.findHints(contestId, index).then((rows) => {
+      const started = deps.repository.findHints(contestId, index).then((rows) => {
         const payload = toHintsPayload(rows)
         deps.cache.set(key, payload, payload ? positiveTtlMs : negativeTtlMs)
         return payload
       })
-      inFlight.set(key, pending)
-      pending.then(() => inFlight.delete(key), () => inFlight.delete(key))
+      const forget = () => { if (inFlight.get(key) === started) inFlight.delete(key) }
+      inFlight.set(key, started)
+      started.then(forget, forget)
+      pending = started
     }
-    return pending
+
+    // A call that never answers must not hold every later request for this problem: each request stops waiting on its
+    // own clock (a shared timer could be lost with the request that started it) and drops the stuck call, so the next
+    // request makes a fresh one.
+    const shared = pending
+    return new Promise<HintsPayload | null>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (inFlight.get(key) === shared) inFlight.delete(key)
+        reject(new Error(`The database did not answer within ${lookupTimeoutMs} ms.`))
+      }, lookupTimeoutMs)
+      shared.then(
+        (payload) => { clearTimeout(timer); resolve(payload) },
+        (error) => { clearTimeout(timer); reject(error) },
+      )
+    })
   }
 
   async function handle(request: ApiRequest): Promise<{ route: string; response: ApiResponse }> {

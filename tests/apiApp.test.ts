@@ -104,6 +104,25 @@ test('the supabase repository turns a database error into an exception', async (
   await assert.rejects(() => repository.findHints(1944, 'C'), /boom/)
 })
 
+test('the supabase repository gives up on a database call that never answers, and cancels it', async () => {
+  let cancelled = false
+  const stuck = ((_input: Request | string | URL, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      // like the real fetch: a signal that has already fired (the client retries once) is refused at once
+      const cancel = () => { cancelled = true; reject(init?.signal?.reason) }
+      if (init?.signal?.aborted) cancel()
+      else init?.signal?.addEventListener('abort', cancel)
+    })) as typeof fetch
+  const repository = createSupabaseHintsRepository('https://example.supabase.co', 'sb_publishable_test', stuck, 30)
+
+  const outcome = await Promise.race([
+    repository.findHints(1944, 'C').then(() => 'answered', (error: Error) => error.name),
+    new Promise((resolve) => setTimeout(() => resolve('hung'), 500)),
+  ])
+  assert.notEqual(outcome, 'hung')
+  assert.ok(cancelled)
+})
+
 test('the node server reads the client name from the url too', async () => {
   const logs: Array<Record<string, unknown>> = []
   const repository: HintsRepository = { async findHints() { return sampleRows } }

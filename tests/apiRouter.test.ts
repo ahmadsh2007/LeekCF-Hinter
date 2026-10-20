@@ -205,6 +205,79 @@ test('simultaneous requests for the same cold problem make one database call', a
   assert.equal(calls.length, 1)
 })
 
+// A call to the database that never answers (a dropped connection that is never reported). Resolves to 'hung' when the
+// request is still waiting after `ms`, so a hang fails a test instead of freezing the test run.
+const settlesWithin = <T>(promise: Promise<T>, ms: number) =>
+  Promise.race([promise, new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), ms))])
+
+function stuckThenHealthy(lookupTimeoutMs: number) {
+  const calls: Array<[number, string]> = []
+  const repository: HintsRepository = {
+    findHints(contestId, index) {
+      calls.push([contestId, index])
+      return calls.length === 1 ? new Promise<HintRow[]>(() => {}) : Promise.resolve(fiveRows())
+    },
+  }
+  const router = createRouter({
+    repository,
+    limiter: new RateLimiter(100, 1),
+    cache: new TtlCache<HintsPayload | null>(600_000, 100),
+    lookupTimeoutMs,
+    log: () => {},
+  })
+  return { router, calls }
+}
+
+test('a database call that never answers becomes a 503 instead of hanging the request', async () => {
+  const { router } = stuckThenHealthy(30)
+  const outcome = await settlesWithin(router(get('/v1/problems/1944/C/hints')), 500)
+  assert.notEqual(outcome, 'hung')
+  assert.equal((outcome as { status: number }).status, 503)
+})
+
+test('a stuck call does not hang that problem for the requests that come after it', async () => {
+  const { router, calls } = stuckThenHealthy(30)
+  await settlesWithin(router(get('/v1/problems/1944/C/hints')), 500)
+
+  const next = await settlesWithin(router(get('/v1/problems/1944/C/hints', '2.2.2.2')), 500)
+  assert.notEqual(next, 'hung')
+  assert.equal((next as { status: number }).status, 200)
+  assert.equal(calls.length, 2) // a fresh database call, not the stuck one
+})
+
+test('requests that joined a stuck call each give up on their own, and the next one starts afresh', async () => {
+  const { router, calls } = stuckThenHealthy(30)
+  const waiting = await settlesWithin(Promise.all([1, 2, 3].map((n) => router(get('/v1/problems/1944/C/hints', `3.3.3.${n}`)))), 500)
+  assert.notEqual(waiting, 'hung')
+  assert.deepEqual((waiting as Array<{ status: number }>).map((response) => response.status), [503, 503, 503])
+  assert.equal(calls.length, 1)
+
+  const fresh = await settlesWithin(router(get('/v1/problems/1944/C/hints', '4.4.4.4')), 500)
+  assert.equal((fresh as { status: number }).status, 200)
+})
+
+test('an answer that arrives after the request gave up does not break the next one', async () => {
+  let release: (rows: HintRow[]) => void = () => {}
+  let calls = 0
+  const repository: HintsRepository = {
+    findHints() {
+      calls += 1
+      return calls === 1 ? new Promise<HintRow[]>((resolve) => { release = resolve }) : Promise.resolve(fiveRows())
+    },
+  }
+  const router = createRouter({
+    repository, limiter: new RateLimiter(100, 1), cache: new TtlCache<HintsPayload | null>(600_000, 100), lookupTimeoutMs: 20, log: () => {},
+  })
+  const first = await settlesWithin(router(get('/v1/problems/1944/C/hints')), 500)
+  assert.equal((first as { status: number }).status, 503)
+  const second = await settlesWithin(router(get('/v1/problems/1944/C/hints', '2.2.2.2')), 500)
+  release(fiveRows()) // the first call finally answers, after both requests are over
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  assert.equal((second as { status: number }).status, 200)
+  const third = await settlesWithin(router(get('/v1/problems/1944/C/hints', '5.5.5.5')), 500)
+  assert.equal((third as { status: number }).status, 200)
+})
+
 test('a client that asks too often gets 429 with Retry-After, and the database is spared', async () => {
   const { router, calls } = setup({ capacity: 2 })
   await router(get('/v1/problems/1944/A/hints', '5.5.5.5'))
