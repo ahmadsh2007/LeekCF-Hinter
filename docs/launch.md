@@ -29,7 +29,8 @@ the edge (most requests never reach the database), and keeps request logs. Other
    npx wrangler secret put SUPABASE_PUBLISHABLE_KEY     # paste the PUBLISHABLE key, never the secret key
    ```
    The Worker refuses to start with a secret key.
-4. **Deploy:** `npx wrangler deploy`. It prints the address.
+4. **Deploy:** `npx wrangler deploy`. It prints the address. (Afterwards every change to the API on `main` can be
+   deployed by GitHub itself: see "Backups and API deploys" in `docs/automation.md`.)
 5. **Put that address in `wrangler.toml`** as `PUBLIC_BASE_URL` and deploy again, so the documentation shows the real URL.
 6. **Check it:**
    ```bash

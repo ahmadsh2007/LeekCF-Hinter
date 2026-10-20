@@ -1,0 +1,47 @@
+# Saves every table of the database into a PRIVATE backup repository every day (the newest 30 are kept there). The
+# backups hold Codeforces' statements and editorials, so they must never go into this public repository or its artifacts.
+# It does nothing until the repository variable BACKUP_ENABLED=true exists (or you start it by hand from the Actions tab).
+# scripts/setup-github-deploy-and-backup.sh creates the private repository, its key and the settings.
+# Restoring: docs/automation.md.
+name: Backup
+
+on:
+  schedule:
+    - cron: "30 4 * * *"   # after the usage export (03:17 UTC), so the new day's numbers are in the backup
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.BACKUP_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      SUPABASE_DATABASE_SECRET_KEY: ${{ secrets.SUPABASE_DATABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r requirements.txt
+      - name: Export every table
+        run: |
+          dir="$RUNNER_TEMP/backup/$(date -u +%Y-%m-%d_%H%M)"
+          echo "BACKUP_DIR=$dir" >> "$GITHUB_ENV"
+          python -u -m src.workers.backup.exportDatabase --out "$dir"
+      - name: Check the backup can be read back (nothing is written to the database)
+        run: python -u -m src.workers.backup.restoreDatabase --from "$BACKUP_DIR"
+      - name: Keep it in the private backup repository
+        env:
+          BACKUP_DEPLOY_KEY: ${{ secrets.BACKUP_DEPLOY_KEY }}
+          BACKUP_REPO: ${{ vars.BACKUP_REPO }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$BACKUP_DEPLOY_KEY" > ~/.ssh/backup_key
+          chmod 600 ~/.ssh/backup_key
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/backup_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          scripts/publish-backup.sh "$BACKUP_DIR" "git@github.com:${BACKUP_REPO}.git" 30

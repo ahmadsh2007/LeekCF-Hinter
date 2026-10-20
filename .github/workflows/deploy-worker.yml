@@ -1,0 +1,44 @@
+# Deploys the public API to Cloudflare whenever its code changes on main, after its tests pass, so `npx wrangler deploy`
+# never has to be run by hand. It does nothing until the repository variable DEPLOY_ENABLED=true exists (or you start it
+# by hand from the Actions tab). The Cloudflare token for it is its own secret, CLOUDFLARE_DEPLOY_TOKEN; the Worker's own
+# runtime secrets (database URL and publishable key) stay in Cloudflare and are not touched by a deploy.
+# scripts/setup-github-deploy-and-backup.sh creates the token's secret and the setting.
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/api/**"
+      - "wrangler.toml"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: API tests
+        run: node --test tests/*.test.ts
+      - name: Deploy to Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.151.3 deploy
+      - name: Check the live API answers
+        run: |
+          url=$(sed -n 's/^PUBLIC_BASE_URL = "\(.*\)"/\1/p' wrangler.toml)
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$url/v1/health"

@@ -81,6 +81,35 @@ no activity for 60 days.
 Both the Mac and GitHub use the same Gemini key, so they share one daily quota: stop the Mac's `scripts/backfill.sh` once
 GitHub's runs work.
 
+#### Backups and API deploys (also on GitHub)
+
+A second command sets up the last two jobs that used to need a computer; run it after the first one:
+
+```bash
+ENV_FILE=~/leekcf-env/staging.env scripts/setup-github-deploy-and-backup.sh
+```
+
+- **Daily backup** (`.github/workflows/backup.yml`, 04:30 UTC): exports every table, checks the export can be read back
+  (nothing is written to the database), and saves it in the **private** repository `<you>/LeekCF-Hinter-backups`. The wizard
+  creates that repository and a deploy key that opens only that one repository. The newest 30 backups are kept; the
+  repository's history is cut to a single commit on every run, so deleted backups are really gone and it stays about 30 times
+  the size of one backup (a few MB each today). The backups hold Codeforces' statements and editorials, so the backup
+  repository must stay private, and the workflow never uses this public repository or workflow artifacts for them.
+  Secret `BACKUP_DEPLOY_KEY`; variables `BACKUP_REPO` and `BACKUP_ENABLED`.
+- **Automatic deploy** (`.github/workflows/deploy-worker.yml`): when `src/api/`, `wrangler.toml` or the package files change on
+  `main`, it runs the API's tests, deploys with a pinned `wrangler` version, and checks `/v1/health` answers. It has its own
+  Cloudflare token (secret `CLOUDFLARE_DEPLOY_TOKEN`, the "Edit Cloudflare Workers" template), separate from the read-only
+  usage token, so the daily pipeline never sees a key that can change the API. The Worker's runtime secrets (database URL
+  and publishable key) stay in Cloudflare and a deploy does not touch them. Variable `DEPLOY_ENABLED`.
+- Both can be started by hand from the Actions tab. A failed run sends the usual failure email.
+
+**Restoring** (a disaster-recovery job, so it is the one thing done by hand): clone the backup repository, pick a dated
+folder, and run `ENV_FILE=... venv/bin/python -m src.workers.backup.restoreDatabase --from FOLDER --apply --verify` against a
+project that already has migrations 000-005 (without `--apply` it only checks the backup).
+
+What is still done by hand, and not on a computer: running a new SQL file from `migrations/` once, by pasting it into
+Supabase's SQL editor in the browser.
+
 ### 2. On your Mac (free, most likely to work with Codeforces)
 
 Test once by hand: `ENV_FILE=~/leekcf-env/staging.env scripts/daily.sh`. Then run it every day with launchd. Save this as

@@ -48,7 +48,7 @@ Not built: the browser extension. Hints are never generated for, or served from,
 
 SQL files in `migrations/` are applied by hand (Supabase SQL editor), in order. They are not run by any script.
 
-1. **Take a backup first.**
+1. **Take a backup first.** The daily GitHub backup (`docs/automation.md`) already has last night's; run `.github/workflows/backup.yml` from the Actions tab for a fresh one.
 2. `001_foundation.sql` is additive and runs in one transaction. Apply it before running the scripts below:
    the old scripts write `memory_limit_ms`, which it renames to `memory_limit_mb`.
 3. `002_merge_interactive_specs_and_drop_archive.sql` is destructive (drops two tables) and refuses to run unless
