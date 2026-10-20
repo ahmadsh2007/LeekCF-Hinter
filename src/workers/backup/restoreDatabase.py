@@ -19,7 +19,11 @@ def loadBackup(directory: str) -> dict[str, list[dict]]:
     data: dict[str, list[dict]] = {}
     for table in TABLES:
         path = os.path.join(directory, fileName(table))
-        if not os.path.isfile(path) or table.name not in manifest["tables"]:
+        present = os.path.isfile(path), table.name in manifest["tables"]
+        if table.addedLater and not any(present):
+            print(f"  (this backup was made before {table.name} existed; that table is skipped)")
+            continue
+        if not all(present):
             raise BackupError(f"The backup is missing the table {table.name}.")
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             rows = [json.loads(line) for line in handle if line.strip()]
@@ -42,7 +46,7 @@ def countRows(client, table: BackupTable) -> int:
 
 def restoreDatabase(client, directory: str, apply: bool = False, batchSize: int = DEFAULT_BATCH_SIZE, verify: bool = False) -> dict:
     """
-    Puts a backup into a project that already has the tables (migrations 000-004). Rows are upserted on their natural
+    Puts a backup into a project that already has the tables (migrations 000-005). Rows are upserted on their natural
     keys, so running it again changes nothing, and nothing is written unless `apply` is true.
     """
     data = loadBackup(directory)
@@ -50,6 +54,8 @@ def restoreDatabase(client, directory: str, apply: bool = False, batchSize: int 
 
     if apply:
         for table in TABLES:
+            if table.name not in data:
+                continue
             rows = data[table.name]
             if table.name == "problems":
                 # A duplicate points at its canonical problem, which must already be stored.
@@ -62,6 +68,8 @@ def restoreDatabase(client, directory: str, apply: bool = False, batchSize: int 
     if verify:
         mismatches = []
         for table in TABLES:
+            if table.name not in data:
+                continue
             have = countRows(client, table)
             if have != result[table.name]:
                 mismatches.append(f"{table.name}: backup has {result[table.name]} rows, the project has {have}")

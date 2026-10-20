@@ -20,6 +20,8 @@ class FakeQuery:
         self.countRequested = False
         self.rangeBounds = None
         self.onConflict = None
+        self.descending = False
+        self.limitCount = None
 
     def select(self, columns="*", count=None):
         self.columns = columns
@@ -42,9 +44,14 @@ class FakeQuery:
         self.containsFilters.append((column, list(values)))
         return self
 
-    def order(self, column):
+    def order(self, column, desc=False):
         self.orderColumn = self.orderColumn or column  # the first one, kept for the older assertions
         self.orderColumns.append(column)
+        self.descending = desc
+        return self
+
+    def limit(self, count):
+        self.limitCount = count
         return self
 
     def range(self, start, end):
@@ -94,10 +101,12 @@ class FakeQuery:
         rows = matched
         total = len(matched)
         if self.orderColumns:
-            rows.sort(key=lambda row: tuple(row[column] for column in self.orderColumns))
+            rows.sort(key=lambda row: tuple(row[column] for column in self.orderColumns), reverse=self.descending)
         if self.rangeBounds:
             start, end = self.rangeBounds
             rows = rows[start:end + 1]
+        if self.limitCount is not None:
+            rows = rows[:self.limitCount]
         if self.columns != "*":
             wanted = [column.strip() for column in self.columns.split(",")]
             rows = [{column: row[column] for column in wanted} for row in rows]

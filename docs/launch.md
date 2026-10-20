@@ -78,16 +78,19 @@ Built in today (no extra work):
 - **Every request is logged** as one JSON line: route, status, response time, the app that made it, and whether the
   answer came from the cache. **No IP address is logged or stored.**
 - **Cloudflare's dashboard** shows requests, errors, response times and cache hit rate for the Worker, free.
-- **Per-app statistics:** integrators are asked (in the docs) to send `X-Client: their-app/1.0`; otherwise the
-  User-Agent's product name is used. It is self-declared, so it is good for statistics and not for security.
+- **Per-app statistics:** integrators are asked (in the docs) to send `X-Client: their-app/1.0`, or, in a browser, to add
+  `?client=their-app/1.0` to the URL (no preflight request); otherwise the User-Agent's product name is used. It is
+  self-declared, so it is good for statistics and not for security.
+- **Statistics for years:** the Worker writes one data point per request to Cloudflare's Analytics Engine, and a daily job
+  copies the totals into the database. Setup and example queries: `docs/usage-stats.md`.
 - **Rate limiting:** 60 requests a minute per client address per Cloudflare location (a soft limit); Cloudflare's own
   rules can add a hard one in the dashboard.
 
 Limits to know about:
 
-- Workers Logs keep only **3 days** ([limits](https://developers.cloudflare.com/workers/platform/pricing/)). For months of
-  history, create an Analytics Engine dataset in the dashboard and uncomment the `[[analytics_engine_datasets]]` block in
-  `wrangler.toml`; the Worker then writes one data point per request (route, status, app, response time, cache hit).
+- Workers Logs keep only **3 days** ([limits](https://developers.cloudflare.com/workers/platform/pricing/)) and the
+  Analytics Engine keeps data for **3 months** ([limits](https://developers.cloudflare.com/analytics/analytics-engine/limits/)).
+  That is why `docs/usage-stats.md` copies the daily totals into your own database, where they stay.
   (Written to Cloudflare's documented shape but not tried against a real dataset.)
 - There are no user accounts or API keys, so "users" means apps and anonymous clients, not people. If abuse ever
   appears, API keys per integrator are the next step.

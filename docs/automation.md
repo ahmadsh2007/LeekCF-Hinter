@@ -61,7 +61,9 @@ while it slept runs on wake). Read `~/leekcf-env/daily.log` to see what happened
 `.github/workflows/daily-pipeline.yml` runs the same script on GitHub's servers every day. It does nothing until you
 enable it. In the repository's **Settings → Secrets and variables → Actions** create:
 
-- secrets: `SUPABASE_DATABASE_URL`, `SUPABASE_DATABASE_SECRET_KEY`, and the key of your model provider
+- secrets: `SUPABASE_DATABASE_URL`, `SUPABASE_DATABASE_SECRET_KEY`, and the key of your model provider (optionally
+  `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, which turn on the daily copy of the API's usage statistics, see
+  `docs/usage-stats.md`)
   (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`);
 - variables: `LLM_PROVIDER` (`gemini` or `anthropic`), the matching `GEMINI_MODEL` / `ANTHROPIC_MODEL`, and finally
   `PIPELINE_ENABLED` = `true`.

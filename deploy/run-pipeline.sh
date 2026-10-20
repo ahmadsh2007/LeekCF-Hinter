@@ -19,21 +19,24 @@ run() {
   "$@"
 }
 
-echo "--- 1/5 scrape statements ---"
+echo "--- 1/6 scrape statements ---"
 run "$PYTHON" -u -m src.services.scraper.mainChecker --limit "$SCRAPE_LIMIT" --delay 2
 
-echo "--- 2/5 link duplicates (Div. 1 A = Div. 2 C) ---"
+echo "--- 2/6 link duplicates (Div. 1 A = Div. 2 C) ---"
 run "$PYTHON" -u -m src.workers.dedup.dedupProblems --apply
 
-echo "--- 3/5 contest protector ---"
+echo "--- 3/6 contest protector ---"
 run "$PYTHON" -u -m src.workers.contest_monitor.contestProtector
 
-echo "--- 4/5 find tutorials ---"
+echo "--- 4/6 find tutorials ---"
 run "$PYTHON" -u -m src.workers.tutorial_finder.findTutorials --limit "$TUTORIAL_CONTEST_LIMIT" --delay 2
 
-echo "--- 5/5 generate hints ---"
+echo "--- 5/6 generate hints ---"
 if [ "$INCLUDE_WITHOUT_TUTORIAL" = "true" ]; then
   run "$PYTHON" -u -m src.workers.hint_generator.generateHints --limit "$HINT_LIMIT" --include-without-tutorial
 else
   run "$PYTHON" -u -m src.workers.hint_generator.generateHints --limit "$HINT_LIMIT"
 fi
+
+echo "--- 6/6 save the API usage statistics (needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN) ---"
+run "$PYTHON" -u -m src.workers.usage.rollupUsage --if-configured

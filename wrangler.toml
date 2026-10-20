@@ -15,8 +15,9 @@ PUBLIC_BASE_URL = "https://leekcf-hinter-api.leekcf.workers.dev"
 #   SUPABASE_DATABASE_URL        the project URL
 #   SUPABASE_PUBLISHABLE_KEY     the publishable (anon) key, never the secret key (the Worker refuses that)
 
-# Optional: keep request statistics for months (Workers Logs keep only a few days). Create the dataset in the
-# dashboard (Workers -> Analytics Engine), then remove the '#' below.
-# [[analytics_engine_datasets]]
-# binding = "ANALYTICS"
-# dataset = "hinter_requests"
+# Request statistics. The Worker writes one data point per request (route, status, app name, response time, cache hit;
+# never an address). Cloudflare creates the dataset on the first write and keeps it for three months, so
+# src/workers/usage/rollupUsage.py copies the daily totals into the database, where they stay (docs/usage-stats.md).
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "hinter_requests"

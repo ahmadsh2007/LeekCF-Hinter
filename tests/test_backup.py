@@ -44,7 +44,7 @@ class ExportTests(unittest.TestCase):
         manifest = self.export()
         self.assertEqual(sorted(os.listdir(self.out)), sorted([f"{t.name}.ndjson.gz" for t in TABLES] + ["manifest.json"]))
         self.assertEqual({name: info["rows"] for name, info in manifest["tables"].items()},
-                         {"contests": 1, "problems": 2, "problem_specifications": 1, "sample_tests": 2, "tutorials": 1, "hints": 2})
+                         {"contests": 1, "problems": 2, "problem_specifications": 1, "sample_tests": 2, "tutorials": 1, "hints": 2, "api_usage_daily": 0})
         self.assertEqual(manifest["exported_at"], NOW.isoformat())
         self.assertEqual(json.load(open(os.path.join(self.out, "manifest.json"))), manifest)
 
@@ -72,10 +72,12 @@ class ExportTests(unittest.TestCase):
         self.assertEqual({t.name: t.orderColumns for t in TABLES}, {
             "contests": ("id",), "problems": ("id",), "problem_specifications": ("problem_id",),
             "sample_tests": ("problem_id", "test_order"), "tutorials": ("id",), "hints": ("id",),
+            "api_usage_daily": ("day", "client", "route", "status"),
         })
         self.assertEqual({t.name: t.keyColumns for t in TABLES}, {
             "contests": ("id",), "problems": ("id",), "problem_specifications": ("problem_id",),
             "sample_tests": ("problem_id", "test_order"), "tutorials": ("problem_id",), "hints": ("problem_id", "hint_level"),
+            "api_usage_daily": ("day", "client", "route", "status"),
         })
 
     def test_every_table_is_read_in_a_unique_order_or_paging_could_skip_rows(self):
@@ -181,6 +183,33 @@ class RestoreTests(unittest.TestCase):
         with self.assertRaises(BackupError):
             restoreDatabase(target, self.out, apply=True)
         self.assertEqual(self.upserts(target), [])
+
+    def test_the_usage_statistics_are_backed_up_and_restored_on_their_key(self):
+        tables = sampleTables()
+        tables["api_usage_daily"] = [{"day": "2026-10-20", "client": "ext/1", "route": "hints", "status": 200,
+                                      "requests": 5, "cache_hits": 4, "total_duration_ms": 12.5, "updated_at": "x"}]
+        directory = os.path.join(tempfile.mkdtemp(), "b")
+        exportDatabase(FakeSupabase(tables), directory, now=NOW)
+        target = FakeSupabase({})
+        restoreDatabase(target, directory, apply=True)
+        [usage] = [call for call in self.upserts(target) if call.tableName == "api_usage_daily"]
+        self.assertEqual(usage.onConflict, "day,client,route,status")
+        self.assertEqual(usage.payload[0]["requests"], 5)
+
+    def test_a_backup_made_before_the_usage_table_existed_can_still_be_restored(self):
+        os.remove(os.path.join(self.out, "api_usage_daily.ndjson.gz"))
+        manifestPath = os.path.join(self.out, "manifest.json")
+        with open(manifestPath, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        del manifest["tables"]["api_usage_daily"]
+        with open(manifestPath, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+        target = FakeSupabase({})
+        result = restoreDatabase(target, self.out, apply=True, verify=True)
+        self.assertEqual(result["problems"], 2)
+        self.assertNotIn("api_usage_daily", result)
+        self.assertFalse([m for m in result["_mismatches"] if "api_usage_daily" in m])  # not compared: the backup never had it
+        self.assertTrue(self.upserts(target))
 
     def test_a_truncated_file_is_refused_because_its_row_count_disagrees_with_the_manifest(self):
         with gzip.open(os.path.join(self.out, "problems.ndjson.gz"), "wt", encoding="utf-8") as handle:

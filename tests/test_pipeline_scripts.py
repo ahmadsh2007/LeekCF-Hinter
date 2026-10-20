@@ -27,6 +27,7 @@ class DailyScriptTests(unittest.TestCase):
             "src.workers.contest_monitor.contestProtector",
             "src.workers.tutorial_finder.findTutorials",
             "src.workers.hint_generator.generateHints",
+            "src.workers.usage.rollupUsage",
         ])
 
     def test_new_problems_are_detected_by_the_sync_before_anything_is_scraped(self):
@@ -48,6 +49,10 @@ class DailyScriptTests(unittest.TestCase):
     def test_hints_without_a_tutorial_are_off_unless_asked_for(self):
         self.assertNotIn("--include-without-tutorial", "\n".join(dryRun("scripts/daily.sh", PYTHON="py")))
         self.assertIn("--include-without-tutorial", "\n".join(dryRun("scripts/daily.sh", PYTHON="py", INCLUDE_WITHOUT_TUTORIAL="true")))
+
+    def test_the_usage_statistics_are_saved_last_and_only_when_cloudflare_is_configured(self):
+        commands = dryRun("scripts/daily.sh", PYTHON="py")
+        self.assertTrue(commands[-1].endswith("src.workers.usage.rollupUsage --if-configured"), commands[-1])
 
     def test_the_python_interpreter_is_configurable_for_ci(self):
         commands = dryRun("scripts/daily.sh", PYTHON="python3.14")
@@ -88,12 +93,13 @@ class RealRunTests(unittest.TestCase):
             "src.workers.contest_monitor.contestProtector",
             "src.workers.tutorial_finder.findTutorials",
             "src.workers.hint_generator.generateHints",
+            "src.workers.usage.rollupUsage",
         ])
 
     def test_the_sync_can_be_skipped(self):
         calls = self.runWithRecorders(PIPELINE_SKIP_SYNC="1")
         self.assertFalse(any(c.startswith("node ") for c in calls))
-        self.assertEqual(len(calls), 5)
+        self.assertEqual(len(calls), 6)
 
 
 class ScrapeAllTests(unittest.TestCase):
@@ -163,6 +169,7 @@ class PipelineScriptTests(unittest.TestCase):
             "src.workers.contest_monitor.contestProtector",
             "src.workers.tutorial_finder.findTutorials",
             "src.workers.hint_generator.generateHints",
+            "src.workers.usage.rollupUsage",
         ])
 
 
