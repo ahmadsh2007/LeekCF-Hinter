@@ -54,11 +54,13 @@ time because all progress is in the database. Afterwards `scripts/daily.sh` keep
 
 `.github/workflows/daily-pipeline.yml` runs `scripts/daily.sh` on GitHub's servers every day at **08:15 UTC**, right
 after Google resets the free daily model quotas (midnight US Pacific is 07:00 UTC, or 08:00 UTC when the US clocks go
-back). One run therefore spends the whole day's free quota: about 80 problems from the four 20-a-day flash models (about
-100 s each) plus about 470 from `gemini-3.5-flash-lite` (about 18 s each), measured on 2026-10-20. That is about 4.6 hours
-of GitHub's six-hour cap, and the quota, not `HINT_LIMIT`, is what ends the run: it stops by itself when every model in
-the list has used up its day. `HINT_LIMIT=1000` is simply above what one day can produce, so it never holds a run back;
-lower it if you ever want to cap a run. The backlog therefore clears at about 550 problems a day.
+back). One run therefore spends the whole day's free quota. Measured on the first two scheduled runs (2026-10-21 and
+2026-10-22): 489 and 428 problems, almost all from `gemini-3.5-flash-lite` (about 18 s each); the four bigger flash models
+run out after only a few requests each. A run took 3.3 and 4.5 hours of GitHub's six-hour cap, and the quota, not
+`HINT_LIMIT`, is what ends it: it stops by itself when every model in the list has used up its day. `HINT_LIMIT=1000` is
+simply above what one day can produce, so it never holds a run back; lower it if you ever want to cap a run. The backlog
+therefore clears at roughly 450 problems a day. GitHub starts scheduled runs late (about five hours after the cron time,
+every day so far); that is harmless, since the quota has reset by then and each job still runs once a day.
 `.github/workflows/usage-export.yml` saves the API's usage statistics (`docs/usage-stats.md`). Both are free for a public
 repository.
 
