@@ -57,7 +57,9 @@ def selectCandidates(client, includeWithoutTutorial: bool, noTutorialAfterDays: 
         # Re-checked here even though the status implies it: hints must never be generated for a live contest.
         return isContestOver("FINISHED", start, duration, now) and now >= start + timedelta(seconds=duration) + extra
 
-    sortKey = lambda row: (row["hint_attempts"], row["id"])
+    # Problems not yet tried first; then the newest contest first, so a contest that just ended is not stuck behind the
+    # whole backlog (ids sort as text, which would also put contest 999 after contest 2277).
+    sortKey = lambda row: (row["hint_attempts"], -row["contest_id"], row["id"])
     ready = sorted((row for row in withTutorial if contestIsOver(row, timedelta())), key=sortKey)
     waited = sorted((row for row in withoutTutorial if contestIsOver(row, timedelta(days=noTutorialAfterDays))), key=sortKey)
     return ready + waited

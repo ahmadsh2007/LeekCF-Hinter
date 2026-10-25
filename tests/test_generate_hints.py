@@ -204,6 +204,22 @@ class SelectionTests(unittest.TestCase):
         order = [next(p for p in ("1_A", "1_B", "1_C", "1_D") if f"Problem {p}:" in call["user"]) for call in llm.calls]
         self.assertEqual(order, ["1_D", "1_A", "1_B", "1_C"])
 
+    def test_the_newest_contest_goes_first_so_a_new_contest_is_not_stuck_behind_the_backlog(self):
+        contests = [contest(1), contest(999), contest(2277)]
+        client = world([problem("1_A", 1), problem("999_A", 999), problem("2277_B", 2277), problem("2277_A", 2277)], contests)
+        llm = FakeLlm()
+        go(client, llm)
+        order = [next(p for p in ("1_A", "999_A", "2277_A", "2277_B") if f"Problem {p}:" in call["user"]) for call in llm.calls]
+        self.assertEqual(order, ["2277_A", "2277_B", "999_A", "1_A"])
+
+    def test_a_problem_that_failed_before_still_waits_for_the_ones_not_yet_tried_whatever_their_age(self):
+        contests = [contest(1), contest(2277)]
+        client = world([problem("2277_A", 2277, attempts=1), problem("1_A", 1, attempts=0)], contests)
+        llm = FakeLlm()
+        go(client, llm)
+        order = [next(p for p in ("1_A", "2277_A") if f"Problem {p}:" in call["user"]) for call in llm.calls]
+        self.assertEqual(order, ["1_A", "2277_A"])
+
     def test_limit_bounds_the_number_of_model_calls(self):
         client = world([problem(f"1_{n}") for n in "ABCDE"])
         llm = FakeLlm()
